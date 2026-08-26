@@ -15,13 +15,13 @@ le cooldown théorique.
 ## Structure
 
 ```
-HealPlanner.toc          # métadonnées + ordre de chargement
+EiikoCooldownPlanner.toc # métadonnées + ordre de chargement (le dossier Dev porte le
+                         #   suffixe : le .toc doit TOUJOURS s'appeler comme son dossier)
 Core/
   Constants.lua          # namespace partagé HR, defaults DB, FIGHT_LENGTH (300s)
   Util.lua               # Print/Debug, DeepCopy, ApplyDefaults
   Database.lua           # init SavedVariables (HealPlannerDB / *CharDB)
-  Planner.lua            # GenerateOccurrences + IsSpellReady
-  Plans.lua              # lecture/écriture des placements du joueur
+  Planner.lua            # GenerateOccurrences (dispatch abilities/phases)
   BossSettings.lua       # réglages joueur par sort de boss (Activer/nom custom/son),
                          #   store DB par encounterID→spellID ; ApplyBossSpellSettings
                          #   (nom custom + flag) + FilterTimeline + GetBossSpells
@@ -117,19 +117,22 @@ Data/
   Defensives.lua         # défensifs (spellID -> cooldown, class, role)
   Content.lua            # 8 donjons M+ Midnight S1 + boss (encounterID réels).
                          #   zoneID = PLACEHOLDER. Abilities (timelines) : partiel.
-  Roster.lua             # rôles/classes + icônes (classe/rôle), GetGroupComp, SortComp
+  Roster.lua             # profils de heal (HR.HEAL_PROFILES) + icônes de classe/spe.
+                         #   La couche `comp` (COMP_SLOTS/SortComp/GetGroupComp/VariantHealKey)
+                         #   a été supprimée avec le V1 le 2026-08-26.
   HealerDefaults.lua     # plan de base par healer (variante non supprimable + import)
 UI/
-  ConfigFrame.lua        # modale B (donjons) / A (boss + Trash Info) / C (occurrences / liste trash)
-                         #   2 boutons-icones de vue (haut droite) : Defensive list (UI.viewMode
-                         #   plein largeur) + Options (engrenage). Indicateur "Not Zephyrable"
+  ConfigFrame.lua        # modale B (donjons) / A (boss) / C (occurrences)
+                         #   Bouton-icone Options (engrenage) en haut a droite. La vue
+                         #   "Defensive list" a ete SUPPRIMEE (2026-08-26, aucun bouton n'y menait).
+                         #   ⚠️ La vue TRASH (UI.viewTrash / UI.RenderTrash) existe mais est
+                         #   INACCESSIBLE : aucun code ne pose viewTrash=true et UI.trashButton
+                         #   n'est jamais cree. Decision en attente. Indicateur "Not Zephyrable"
                          #   (rouge) sur les occurrences aoe~=true du planner.
                          #   Bouton "Settings" a cote du nom du boss (UI.bossSettings) : bascule
                          #   plan <-> reglages du boss (UI.RenderBossSettings : 1 ligne/sort
                          #   dedup par id = case Activer + nom editable + Play sound + selecteur
                          #   de son). Reset au changement de boss/donjon/vue/trash.
-  VariantBar.lua         # barre de variantes (menu, compo, actions) + modale création
-  SettingsFrame.lua      # fenêtre Options (bouton à droite des onglets) — vide pour l'instant
   SyncFrame.lua          # modale de PROGRESSION d'une poussee (bouton Sync) : 1 ligne par membre
                          #   du groupe + spinner (8 points, zero texture) jusqu'au verdict —
                          #   `Sync success` (SYNC_OVER recu) / `Sync failed` (SYNC_START mais pas
@@ -204,26 +207,28 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   (`key` == jeton de classe). Le **prêtre a DEUX spes heal** (Discipline, Holy) →
   deux profils `"PRIEST_DISC"`/`"PRIEST_HOLY"` (icône de spe, sorts et plans
   distincts). ⚠️ Ne PAS confondre avec Paladin Holy = classe à 1 spe heal. Helpers :
-  `HR.HealProfileKey(class, spec)`, `HR.VariantHealKey(v)`, `HR.GetHealProfile(key)`.
+  `HR.HealProfileKey(class, spec)`, `HR.GetHealProfile(key)`, `HR.MyHealKey()` (ma spé).
   Le profil est l'unité du sélecteur de heal, des variantes par défaut, du filtrage
   et du choix de spe à la création.
-- **Variantes par donjon** : `HR.db.dungeons[dungeonID] = { usedVariant = <id>,
-  variants = { variant, ... } }`. Une `variant = { id, name, comp, spec, assignments }`
-  couvre TOUT le donjon. `comp` = tableau positionnel aligné sur `HR.COMP_SLOTS`
-  (1 tank, 1 heal, 3 dps → jetons de classe), **trié à l'enregistrement** par rôle
-  puis par jeton de classe (`HR.SortComp`). `spec` = spe heal du **prêtre**
-  (`"Holy"`/`"Discipline"`), `nil` sinon — le heal reste un **jeton de classe** dans
-  `comp[2]` (pour l'icône et le matching de compo via `GetGroupComp`, qui ne lit pas
-  la spe des autres membres) ; `spec` est le discriminant heal-only. L'identité de
-  heal d'une variante = `HR.VariantHealKey(v)`. `assignments[encounterID][occKey] =
-  { defID, ... }`. `usedVariant` = variante jouée par le runtime (bouton ★).
-  Migration de l'ancien `HR.db.plans` à plat → variante « Importe » (cf. Plans.lua).
+- **Variantes par donjon** : `HR.db2.dungeons[dungeonID] = { variants = { [id] = v },
+  usedByKey, lastSeen }` — SavedVariable **`ECPlannerDB`** (`HR.db2`), cf. `Core/Plan2.lua`.
+  ⚠️ L'ancien store V1 `HR.db.dungeons` (`HealPlannerDB`) a été **entièrement supprimé** le
+  2026-08-26 avec `Core/Plans.lua` : même nom de clé, SavedVariable différente, ne pas confondre.
+  Une `variant = { id, name, healer, externals, talentSpells, isTemplate, assignments }`
+  couvre TOUT le donjon. **`healer` = clé de profil de heal** (`"PRIEST_DISC"`, `"PALADIN"`…),
+  posée directement : c'est l'identité de heal de la variante.
+  `assignments[encounterID][occKey] = { defID, ... }`.
+  ⚠️ La notion de **`comp`** — tableau positionnel de 5 slots (`HR.COMP_SLOTS`), trié par
+  `HR.SortComp`, comparé au groupe par `HR.GetGroupComp`, dont on tirait l'identité de heal
+  via `HR.VariantHealKey` — était **propre au V1** : supprimée le 2026-08-26 avec lui.
+  Une variante ne porte plus ni `comp` ni `spec`.
+  La variante **jouée en combat** se résout par `HR.GetV2Used` : choix mémorisé pour ma spé
+  (`usedByKey`) → défaut de ma spé → **rien**. Aucun repli « 1re variante » côté combat.
 - **Variantes par défaut** (`Data/HealerDefaults.lua`, `HR.healerDefaults[profileKey]`) :
-  une par **profil de heal** (donc DEUX pour le prêtre), comp = ce heal seul,
-  id `"default:KEY"`, `isDefault=true`, `spec` pour le prêtre. DATA non supprimable,
-  base quand ce profil est dans la compo. Un **sélecteur de profil heal** (icônes,
-  façon onglets ; le prêtre = deux onglets de spe) filtre le dropdown : variante par
-  défaut du profil choisi + variantes utilisateur dont `VariantHealKey` correspond.
+  une par **profil de heal** (donc DEUX pour le prêtre), id `"default:KEY"`,
+  `isDefault=true`. DATA non supprimable, base quand ce profil est joué. Un **sélecteur de
+  profil heal** (icônes, façon onglets ; le prêtre = deux onglets de spe) filtre le dropdown :
+  variante par défaut du profil choisi + variantes utilisateur dont le `healer` correspond.
   À la création, le slot heal liste les **profils** (prêtre en Discipline + Holy) ;
   case « Importer le plan de base du heal » → copie les `assignments` du profil.
   (Édition in-game d'un défaut = **persistée** : `Database.InitDB` relie les
@@ -285,8 +290,7 @@ Messages livres :
 
 - `HELLO` / `HELLO_ACK` (`/ecp handshake`) — qui a l'addon, en quelle version. Reponse adressee
   sur le canal ADDON (pas un chuchotement visible), **zero ecriture en DB**.
-- `PLAN` (bouton **Sync** du panneau Healer specs, `UI/HealerSpecs.lua` — PAS `VariantBar.lua`,
-  dont l'UI est construite puis MASQUEE) — pousse la variante
+- `PLAN` (bouton **Sync** du panneau Healer specs, `UI/HealerSpecs.lua`) — pousse la variante
   affichee ; le destinataire l'importe **sans rien demander** et la pose **active** (★). Encodage
   reutilise TEL QUEL (`HR.Share.EncodeVariant`) ; l'id distant voyage dans le corps de la trame,
   pas dans le CBOR, pour ne rien changer au canal de partage deja deploye. ⚠️ **Premier code qui
@@ -468,14 +472,14 @@ Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (
   dans `s.planned` (plus de confusion inter-sorts ; un sort désactivé est absent de
   `s.planned` filtré → ignoré) ; **(4) repli** si durée inconnue : ancien matching global
   par temps dans `TOLERANCE`s. L'affichage (icône/nom/défensifs/`/yell`) vient de NOS
-  données — zéro Secret Value touchée. `/hp debug` logge `[rt] dur|time <nom> @Ns defs=K`.
+  données — zéro Secret Value touchée. En debug (`HealPlannerDB.debug`), logge `[rt] dur|time <nom> @Ns defs=K`.
   **Sorts au PULL sans event Blizzard** (ex. Ick & Krick) : certains sorts démarrent
   dès le début du combat et le serveur n'émet **aucun** `ADDED` pour eux → invisibles.
   RÈGLE : au `StartLive`, `PushSyntheticPullEvents` parcourt `s.planned` et **pousse
   telle quelle** toute occurrence dont le temps théorique `< 2 s` (eventID synthétique
   `"SYNTH:<occKey>"`, `endTime = pullTime + occ.time`), peuplant `recognized`/`active`/
   `liveDefs` comme un vrai event (occurrence connue → pas de matching par durée). Lecture
-  seule côté DB. `/hp debug` logge `[rt] synth pull <nom> @Ns defs=K`.
+  seule côté DB. En debug, logge `[rt] synth pull <nom> @Ns defs=K`.
   Le **TimelineBox** live affiche sa colonne boss via `s.recognized` (nos icône/nom,
   sorts désactivés masqués ; repli brut serveur si non reconnu). Un défensif dont la `class` == celle du
   joueur (`UnitClass("player")`) est mis en **surbrillance** = c'est le tien. Glow
@@ -508,8 +512,8 @@ Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (
     avec les anciennes sauvegardes (TopRight/raw). **EXCEPTION Announcement** : bannière **centrée**
     → ancre **HAUT-CENTRE** (`HR.SaveFramePosTop`, point `TOP`) pour rester centrée horizontalement
     quand la largeur du contenu change (`SavePosForMode` mode `"TOP"`).
-  - **« Show anchors »** (option `showAnchors`, onglet General ; `HR.Runtime.AnchorsVisible()` =
-    `showAnchors` **OU** mode test) : montre les **poignées de déplacement** de chaque fenêtre HUD
+  - **Mode ancres** (`HR.Runtime.AnchorsVisible()` = **mode test UNIQUEMENT** ; l'option
+    `showAnchors` n'existe plus) : montre les **poignées de déplacement** de chaque fenêtre HUD
     et les **force visibles** (mode arrangement) pour les placer. Le **mode test force les ancres
     sans toucher l'option**. Le drag n'est possible **qu'en mode ancres**. ⚠ **En mode test, aucun
     son** (`HR.Alerts.Tick` sort tôt si `state.mode == "test"`) ; le visuel (glow/upcoming) reste.
@@ -530,7 +534,7 @@ Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (
     en tête (`opts.info` → `C.InfoBox`, cadre violet/gris). Timeline et Upcoming sont des **interrupteurs indépendants**
     (`UpdateVisibility` ; le moteur de reconnaissance tourne quoi qu'il arrive). Valeurs
     dans `HR.db.options` ; appliquées à chaud par `ApplyUpcomingOptions`/`ApplyTimelineOptions`/
-    `ApplyCommOptions`/`UpdateVisibility`. (`SettingsFrame.lua` = ancienne modale, inutilisée.)
+    `ApplyCommOptions`/`UpdateVisibility`. 
     NB : l'ancien **bandeau de rappel CD perso** (`UpdateReminder`) et l'affichage entête
     icône/nom/timer (`UpdateDisplay`) sont remplacés par ce layout (code conservé mais
     inutilisé, à nettoyer).
@@ -550,7 +554,7 @@ Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (
     `name=eventInfo.spellName` — possiblement Secret Values, **affichées** via
     `SetTexture`/`SetText` sans être lues, jamais de `or`/comparaison dessus) et la
     boîte déroule tout ce qui vient un par un (`UpdateDisplayRaw`), sans défensif.
-- Runtime TEST (`/hp test`) : timeline THÉORIQUE (`firstAt`/`period`) + bouton **Sync**.
+- Runtime TEST (bouton *Start test*, onglet General) : timeline THÉORIQUE (`firstAt`/`period`).
 - **Mode test dédié** (bouton *Start/Stop test*, onglet General) : `HR.Runtime.StartTestMode`
   sur un **boss inventé** `HR.testBoss` (ABSENT de `HR.content` → invisible) + une variante
   `HR.testVariant` régénérée à chaque init (`HR.BuildTestVariant`, en mémoire, jamais

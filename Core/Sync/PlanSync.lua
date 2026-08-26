@@ -310,8 +310,7 @@ function PlanSync.Apply(sender, msgId, key, dID, payload, opts)
     -- planner a l'ecran) : on ne rafraichit que si elle est deja ouverte sur ce donjon.
     local UI = HR.UI
     if UI and UI.frame and UI.frame:IsShown() and UI.activeDungeonID == dID then
-        if HR.GetHealProfile and HR.GetHealProfile(v.healer) then UI.selHealer = v.healer end
-        if UI.SetActiveVariant then UI.SetActiveVariant(v) end
+        if UI.RefreshRows then UI.RefreshRows() end
     end
 
     HR:Print(("%s pushed a plan: \"%s\" -- imported and set as active.")

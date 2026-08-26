@@ -21,10 +21,3 @@ for _, p in ipairs(HR.HEAL_PROFILES) do
         assignments = {},                -- TODO : placements de base du heal
     }
 end
-
--- Liste ordonnee des variantes par defaut (ordre de HR.HEAL_PROFILES).
-function HR.GetHealerDefaults()
-    local out = {}
-    for _, p in ipairs(HR.HEAL_PROFILES) do out[#out + 1] = HR.healerDefaults[p.key] end
-    return out
-end

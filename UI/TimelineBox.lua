@@ -371,13 +371,6 @@ function HR.Runtime.RegisterTimelineHook(fn)
     return fn
 end
 
--- Desinscrit une action precedemment enregistree.
-function HR.Runtime.UnregisterTimelineHook(fn)
-    for i, f in ipairs(HR.Runtime.timelineHooks) do
-        if f == fn then table.remove(HR.Runtime.timelineHooks, i); return true end
-    end
-end
-
 -- Diffuse un evenement a tous les hooks. Chacun sous pcall : un hook fautif n'impacte
 -- ni les autres ni le rendu.
 function HR.Runtime.FireTimelineEvent(evt)
@@ -443,10 +436,6 @@ local function OnUpdate(self, dt)
         Rebuild(self)
     end
     Reposition(self)        -- a chaque frame : mouvement fluide
-    -- Tracking debug : uniquement sur la timeline reelle (pas l'apercu des settings).
-    if self == UI.timelineBox and HR.Runtime.tlTrack and HR.Runtime.TrackTimelineTick then
-        HR.Runtime.TrackTimelineTick()   -- debug : log par frame (cf. /ecp tltrack)
-    end
 end
 
 --------------------------------------------------------------------------------
@@ -483,142 +472,6 @@ end
 
 function HR.Runtime.ApplyTimelineOptions()
     ApplyTLBox(UI.timelineBox)
-end
-
---------------------------------------------------------------------------------
--- DEBUG : instantané de l'état de la timeline (/ecp tldump). Pour chaque widget actif :
--- icone presente/affichee/alpha, position ECRAN reelle vs position THEORIQUE (rem ->
--- screenOff) -> l'ecart `d` doit etre ~0 (placement direct par frame). Tout sous pcall :
--- un _name / une icone peut etre une Secret Value (lecture interdite -> "<secret>").
---------------------------------------------------------------------------------
-
--- Lit une valeur potentiellement "secrete" sans jamais la comparer/concatener.
-local function SafeVal(fn)
-    local ok, v = pcall(fn)
-    if ok then return v end
-    return "<secret>"
-end
-
---------------------------------------------------------------------------------
--- DEBUG : TRACKING PAR FRAME (/ecp tltrack). Enregistre, A CHAQUE frame tant que
--- c'est actif, pour CHAQUE sort affiche : sa position (icone) ET la position de son
--- timer (label) separement, leur visibilite (shown/alpha), le texte du timer + rem,
--- l'icone (presente/affichee/alpha). Plus d'animation -> GetBottom == position REELLE.
--- Les positions sont RELATIVES au bas/gauche de la fenetre (comparables a "exp").
--- Sortie : ring/buffer dans HealPlannerDB.tlTrackLog -> lisible apres /reload (ou
--- apercu chat via "/ecp tltrack show"). Workflow : reproduire le bug, /ecp tltrack
--- (ON), laisser tourner qq secondes pendant le bug, /ecp tltrack (OFF), /reload.
---------------------------------------------------------------------------------
-
-local TLTRACK_MAX = 8000   -- cap du buffer (~10-15 s a 60 fps avec qq icones)
-
--- (Dé)active le tracking. A l'activation : repart d'un buffer vide.
-function HR.Runtime.SetTimelineTrack(on)
-    HR.Runtime.tlTrack = on and true or false
-    if HR.Runtime.tlTrack and HR.db then
-        HR.db.tlTrackLog = {}
-        HR.db.tlTrackFull = nil
-        HR.Runtime._tlFrame = 0
-    end
-    return HR.Runtime.tlTrack
-end
-
--- Appelée chaque frame par OnUpdate quand tlTrack est ON. Ecrit 1 ligne d'entete
--- (scroll) + 1 ligne par widget actif dans HealPlannerDB.tlTrackLog.
-function HR.Runtime.TrackTimelineTick()
-    local box = UI.timelineBox
-    if not box or not box.active or not HR.db then return end
-    local log = HR.db.tlTrackLog
-    if not log then return end
-    if #log >= TLTRACK_MAX then
-        if not HR.db.tlTrackFull then
-            HR.db.tlTrackFull = true
-            HR.Runtime.tlTrack = false
-            HR:Print(("|cffff8800[tltrack]|r buffer plein (%d lignes), tracking STOPPE. /ecp tltrack pour relancer."):format(TLTRACK_MAX))
-        end
-        return
-    end
-    local s    = HR.Runtime.state
-    local now  = GetTime()
-    local t    = s and s.pullTime and (now - s.pullTime) or 0
-    HR.Runtime._tlFrame = (HR.Runtime._tlFrame or 0) + 1
-    local fr   = HR.Runtime._tlFrame
-    local boxB = box:GetBottom() or 0
-    local boxL = box:GetLeft() or 0
-    log[#log + 1] = ("f%d t%.2f  boxB=%.0f boxH=%.0f"):format(fr, t, boxB, box:GetHeight() or 0)
-
-    local function rel(v, base) return v and ("%.0f"):format(v - base) or "?" end
-    for key, w in pairs(box.active) do
-        local rem    = w._endTime and (w._endTime - now) or -999
-        local lb     = w.label
-        local lblTxt = (w._showLabel and lb) and SafeVal(function() return lb:GetText() end) or "-"
-        local nm     = SafeVal(function() return tostring(w._name) end)
-        local hasTex = SafeVal(function() return w.tex:GetTexture() and "y" or "NIL" end)
-        log[#log + 1] = ("  f%d [%s] %s rem=%.1f lbl=%s | ICON sh=%s a=%.1f b=%s l=%s | TIMER sh=%s a=%.1f b=%s l=%s | tex=%s texSh=%s texA=%.1f"):format(
-            fr, tostring(key), tostring(nm), rem, tostring(lblTxt),
-            w:IsShown() and "y" or "n", w:GetAlpha(), rel(w:GetBottom(), boxB), rel(w:GetLeft(), boxL),
-            lb and (lb:IsShown() and "y" or "n") or "?", lb and lb:GetAlpha() or 0,
-            lb and rel(lb:GetBottom(), boxB) or "?", lb and rel(lb:GetLeft(), boxL) or "?",
-            tostring(hasTex), w.tex and (w.tex:IsShown() and "y" or "n") or "?", w.tex and w.tex:GetAlpha() or 0)
-    end
-end
-
--- Apercu chat des N dernieres lignes (sans /reload).
-function HR.Runtime.ShowTimelineTrack(n)
-    local log = HR.db and HR.db.tlTrackLog
-    if not log or #log == 0 then HR:Print("[tltrack] buffer vide."); return end
-    n = n or 30
-    HR:Print(("|cff88ccff[tltrack]|r last %d / %d lines:"):format(math.min(n, #log), #log))
-    for i = math.max(1, #log - n + 1), #log do HR:Print(log[i]) end
-end
-
-function HR.Runtime.DumpTimeline()
-    local box = UI.timelineBox
-    if not box then HR:Print("[tldump] no timeline box."); return end
-    local s = HR.Runtime.state
-    local o = Opt()
-    local now = GetTime()
-    local window  = o.timelineWindow or 30
-    local usableH = box:GetHeight() - TL_TOPPAD - TL_BOTPAD
-    local boxBottom = box:GetBottom()
-
-    HR:Print(("|cff88ccff[tldump]|r state=%s mode=%s passthrough=%s | window=%.0f usableH=%.0f")
-        :format(s and "yes" or "NONE", s and tostring(s.mode) or "-",
-                s and tostring(s.passthrough) or "-", window, usableH))
-
-    -- Compte des widgets actifs vs total du pool.
-    local nActive, nPool = 0, #box.items
-    for _ in pairs(box.active or {}) do nActive = nActive + 1 end
-    HR:Print(("  active=%d pool=%d boxBottom=%s")
-        :format(nActive, nPool, boxBottom and ("%.0f"):format(boxBottom) or "nil"))
-
-    for key, w in pairs(box.active or {}) do
-        local rem = w._endTime and (w._endTime - now) or nil
-        -- Position theorique (boss = extra 0 ; def = stacking inconnu ici, on note "~").
-        local expOff = rem and (TL_BOTPAD + (rem / window) * usableH) or nil
-        local wBottom = w:GetBottom()
-        local realOff = (wBottom and boxBottom) and (wBottom - boxBottom) or nil
-        local delta   = (expOff and realOff) and (realOff - expOff) or nil
-        local hasTex  = SafeVal(function() return w.tex:GetTexture() and "yes" or "NIL" end)
-        local texShown = w.tex and w.tex:IsShown() and "y" or "n"
-        local texA    = w.tex and ("%.1f"):format(w.tex:GetAlpha()) or "?"
-        local lbl     = w._showLabel and SafeVal(function() return w.label:GetText() end) or "-"
-        local nm      = SafeVal(function() return tostring(w._name) end)
-        local flag    = ""
-        if hasTex == "NIL" then flag = flag .. " |cffff4444<NO ICON>|r" end
-        if delta and math.abs(delta) > TL_ICON then
-            flag = flag .. (" |cffff8800<POS off %.0fpx>|r"):format(delta)
-        end
-        HR:Print(("  [%s] %s boss=%s rem=%s exp=%s real=%s d=%s | tex=%s shown=%s/%s a=%s lbl=%s%s")
-            :format(tostring(key), tostring(nm), tostring(w._isBoss),
-                    rem and ("%.1f"):format(rem) or "nil",
-                    expOff and ("%.0f"):format(expOff) or "-",
-                    realOff and ("%.0f"):format(realOff) or "-",
-                    delta and ("%.0f"):format(delta) or "-",
-                    tostring(hasTex), w:IsShown() and "y" or "n", texShown, texA,
-                    tostring(lbl), flag))
-    end
-    HR:Print("|cff88ccff[tldump]|r end. (<NO ICON> = texture absente ; <POS off> = position ecran != theorie [doit etre ~0 maintenant].)")
 end
 
 -- Refresh MANUEL : libere toutes les icones -> le prochain rendu re-pose tout proprement.

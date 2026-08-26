@@ -100,10 +100,14 @@ function HR.SelectVariant(id, dID)
 end
 
 -- Variante ACTIVE (★ jouee en combat / auto-load) du donjon, RESOLUE POUR MA SPE.
--- EXPLICITE UNIQUEMENT (aucune auto-designation) : (1) choix memorise pour ma spe (bouton
--- "Use") -> (2) defaut de ma spe (bouton "Default") -> (3) compat : ancien s.used SEULEMENT
--- s'il est de ma spe -> sinon nil. PAS de repli "1re variante" : sans choix explicite, rien
--- n'est actif/defaut (l'affichage editable, lui, retombe sur la 1re via GetActiveVariant).
+-- EXPLICITE UNIQUEMENT (aucune auto-designation), DEUX etapes : (1) choix memorise pour ma
+-- spe (bouton "Use") -> (2) defaut de ma spe (bouton "Default") -> sinon nil.
+-- PAS de repli "1re variante" : sans choix explicite, rien n'est actif/defaut, et le pull
+-- affiche la timeline du boss SANS defensif (l'affichage editable, lui, retombe sur la 1re
+-- via GetActiveVariant -- c'est de l'UI, pas du combat).
+-- (Une 3e etape lisait l'ancien champ `s.used`, non scope par spe : supprimee le 2026-08-26.
+--  Consequence assumee : un joueur dont le choix ne vivait QUE la doit recliquer "Use" une
+--  fois. On ne migre pas `s.used` vers `usedByKey` -- ce serait reecrire la DB du joueur.)
 function HR.GetV2Used(dID)
     local s = dStore(dID); if not s then return nil end
     local key = HR.MyHealKey()
@@ -112,9 +116,6 @@ function HR.GetV2Used(dID)
     local specID = HR.PlayerSpecID()
     local vid = specID and HR.GetDefaultVariantId(dID, specID)
     if vid and s.variants[vid] then return s.variants[vid] end
-    if key and s.used and s.variants[s.used] and s.variants[s.used].healer == key then
-        return s.variants[s.used]
-    end
     return nil
 end
 -- Definit la variante active MEMORISEE POUR MA SPE. ⚠️ La clef est celle du JOUEUR
@@ -122,7 +123,6 @@ end
 -- ecrire sous `v.healer` rendait le choix illisible des que la variante n'etait pas de ma spe
 -- (cas d'un plan importe chez un DPS/TANK : "Use" n'ancrait rien). Pour un healer qui choisit
 -- une variante de SA spe, les deux clefs coincident -> comportement inchange.
--- Ecrit aussi l'ancien champ s.used (ombre de compat ; la lecture passe par usedByKey).
 function HR.SetV2Used(id, dID)
     local s = dStore(dID); local v = s and s.variants[id]
     if not v then return end
@@ -131,7 +131,6 @@ function HR.SetV2Used(id, dID)
         s.usedByKey = s.usedByKey or {}
         s.usedByKey[key] = id
     end
-    s.used = id
 end
 
 -- Recale le pointeur de navigation (lastSeen) sur MA spe s'il pointe une AUTRE classe.
@@ -312,7 +311,6 @@ function HR.CleanupBaseVariants()
                     else
                         variants[id] = nil          -- coquille vide -> supprimee
                         if s.lastSeen == id then s.lastSeen = nil end
-                        if s.used == id then s.used = nil end
                         deleted = deleted + 1
                     end
                 end
@@ -367,7 +365,6 @@ function HR.PruneExpiredVariants(dID)
                     if v and not v.base then
                         s.variants[id] = nil
                         if s.lastSeen == id then s.lastSeen = nil end
-                        if s.used == id then s.used = nil end
                     end
                 end
                 map[id] = nil                  -- echeance honoree -> on l'oublie
@@ -380,7 +377,7 @@ function HR.PruneExpiredVariants(dID)
 end
 
 -- Cree une variante (healer + externals). importBase => part de la Base template du heal.
--- (V2_ : evite la collision avec l'ancien HR.CreateVariant de Plans.lua.)
+-- (Prefixe V2_ : vestige de la coexistence avec le store V1, supprime le 2026-08-26.)
 -- opts = { isTemplate = bool, copyTemplateId = id } : copyTemplateId => le plan (assignments)
 -- est copie depuis CE template ; sinon plan vide.
 function HR.V2_CreateVariant(name, healer, externals, talentSpells, opts)
@@ -454,7 +451,7 @@ function HR.V2_UpdateVariant(id, name, externals, talentSpells)
 end
 
 -- Duplique la variante active (compo defensive + plan EXACTS) avec un nouveau nom.
--- (V2_ : evite la collision avec l'ancien HR.DuplicateVariant de Plans.lua.)
+-- (Prefixe V2_ : vestige de la coexistence avec le store V1, supprime le 2026-08-26.)
 --
 -- ⚠️ La copie est l'oeuvre de CELUI QUI DUPLIQUE : les marqueurs de synchro (`synced`,
 -- `syncFrom`) ne doivent JAMAIS etre repris. Les recopier ferait deux degats : la copie
@@ -496,7 +493,6 @@ function HR.V2_DeleteVariant(id)
         s.lastSeen = nil
         HR.GetActiveVariant()                              -- repare lastSeen sur la 1re dispo (ou nil)
     end
-    if s.used == id then s.used = nil end                  -- l'active supprimee -> re-ancree par GetV2Used
     return true
 end
 
@@ -779,98 +775,6 @@ function HR.GetLocalActiveTalents()
         end
     end
     return set
-end
-
---------------------------------------------------------------------------------
--- DIAGNOSTIC (/ecp grouptalents) : lit + imprime les talents (spellID + nom) de TOUS
--- les joueurs du groupe. Local = lecture directe ; autres = INSPECT (NotifyInspect ->
--- INSPECT_READY), UN A LA FOIS (async), avec timeout. Sert a valider ce qui est lisible
--- chez les autres en 12.0 (l'API d'inspect des talents est a confirmer en jeu).
---------------------------------------------------------------------------------
-
--- Liste { {id, name}, ... } des talents actifs d'un config de traits (local OU inspect).
-local function readTalentList(cfgID)
-    local out = {}
-    if not (C_Traits and cfgID) then return out end
-    local cfg = C_Traits.GetConfigInfo(cfgID)
-    if not cfg or not cfg.treeIDs then return out end
-    for _, treeID in ipairs(cfg.treeIDs) do
-        for _, nodeID in ipairs(C_Traits.GetTreeNodes(treeID) or {}) do
-            local node = C_Traits.GetNodeInfo(cfgID, nodeID)
-            if node and node.activeEntry and (node.activeEntry.rank or 0) > 0 then
-                local entry = C_Traits.GetEntryInfo(cfgID, node.activeEntry.entryID)
-                if entry and entry.definitionID then
-                    local def = C_Traits.GetDefinitionInfo(entry.definitionID)
-                    if def and def.spellID then
-                        local name = (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(def.spellID)) or "?"
-                        out[#out + 1] = { id = def.spellID, name = name }
-                    end
-                end
-            end
-        end
-    end
-    table.sort(out, function(a, b) return a.id < b.id end)
-    return out
-end
-
-local function dumpTalents(label, cfgID)
-    local list = readTalentList(cfgID)
-    HR:Print(("|cff9e70eb== %s : %d talent(s) ==|r"):format(label, #list))
-    for _, t in ipairs(list) do HR:Print(("  %d  %s"):format(t.id, t.name)) end
-    if #list == 0 then HR:Print("  (rien de lisible)") end
-end
-
-local talentDumpFrame, talentQueue, talentCur
-
-local function inspectNextTalent()
-    local unit = talentQueue and table.remove(talentQueue, 1)
-    if not unit then
-        if talentDumpFrame then talentDumpFrame:UnregisterEvent("INSPECT_READY") end
-        if ClearInspectPlayer then ClearInspectPlayer() end
-        HR:Print("Scan des talents termine.")
-        return
-    end
-    if not (UnitExists(unit) and CanInspect and CanInspect(unit)) then
-        dumpTalents((UnitName(unit) or unit) .. " [non inspectable]", nil)
-        return inspectNextTalent()
-    end
-    talentCur = { unit = unit, guid = UnitGUID(unit) }
-    NotifyInspect(unit)
-    C_Timer.After(2, function()                       -- timeout : hors portee / pas de reponse
-        if talentCur and talentCur.unit == unit then
-            dumpTalents((UnitName(unit) or unit) .. " [inspect: pas de reponse]", nil)
-            talentCur = nil
-            inspectNextTalent()
-        end
-    end)
-end
-
-function HR.DumpGroupTalents()
-    -- Local : lecture directe (fiable).
-    local localCfg = C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_ClassTalents.GetActiveConfigID()
-    dumpTalents("Vous (" .. (UnitName("player") or "?") .. ")", localCfg)
-
-    -- Autres allies : file d'inspect (un a la fois).
-    talentQueue = {}
-    for _, u in ipairs(groupUnits()) do
-        if UnitExists(u) and not UnitIsUnit(u, "player") then talentQueue[#talentQueue + 1] = u end
-    end
-    if #talentQueue == 0 then HR:Print("Aucun autre joueur a inspecter."); return end
-
-    if not talentDumpFrame then
-        talentDumpFrame = CreateFrame("Frame")
-        talentDumpFrame:SetScript("OnEvent", function(_, _, guid)
-            if not talentCur then return end
-            if guid and guid ~= talentCur.guid then return end
-            local icfg = Constants and Constants.TraitConsts and Constants.TraitConsts.INSPECT_TRAIT_CONFIG_ID
-            dumpTalents((UnitName(talentCur.unit) or talentCur.unit) .. " [inspect]", icfg)
-            talentCur = nil
-            inspectNextTalent()
-        end)
-    end
-    talentDumpFrame:RegisterEvent("INSPECT_READY")
-    HR:Print("Inspection des allies (a portee, hors combat)...")
-    inspectNextTalent()
 end
 
 -- Set { spellID=true } des talents actifs d'un config de traits (local OU inspect).

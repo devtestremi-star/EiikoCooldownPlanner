@@ -10,7 +10,6 @@ local function PrintHelp()
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp config" .. HR.COLORS.RESET .. "  - opens the planning window")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp help" .. HR.COLORS.RESET .. "    - shows this help")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp toggle" .. HR.COLORS.RESET .. "  - enables/disables the addon")
-    HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp status" .. HR.COLORS.RESET .. "  - shows the current state")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp handshake" .. HR.COLORS.RESET .. " - asks the group who runs ECP, and in which version")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp macros" .. HR.COLORS.RESET .. "  - (re)creates the EHP_ macros (/yell for external CDs)")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp devlog" .. HR.COLORS.RESET .. "  - dev log for debugging (show/on/off/clear)")
@@ -33,13 +32,6 @@ local dispatch = {
         HR:Print("Addon " .. (HR.db.enabled
             and (HR.COLORS.GREEN .. "enabled")
             or (HR.COLORS.RED .. "disabled")) .. HR.COLORS.RESET .. ".")
-    end,
-
-    status = function()
-        HR:Print(("State: %s | Saved plans: %d")
-            :format(
-                HR.db.enabled and "enabled" or "disabled",
-                HR.CountPlans()))
     end,
 
     -- Handshake du canal de synchro : qui, dans le groupe, fait tourner l'addon.

@@ -9,7 +9,6 @@ local addonName, HR = ...
 HR.UI = HR.UI or {}
 local UI = HR.UI
 
-local SEP_HEIGHT  = 22          -- separateur de phase (ligne + libelle "Phase N")
 local BOSS_GAP    = 6           -- ecart horizontal entre boutons de boss
 
 -- Sidebar de navigation (Phase 2) : donjons + Defs + Options, en boutons-image.
@@ -31,53 +30,12 @@ local BOSSROW_H    = BOSS_BTN_H + 2 * SIDE_LAT_PAD   -- = 61
 UI.selDungeon = 1
 UI.selBoss    = 1
 
--- Modale de confirmation du "Tout reinitialiser".
-StaticPopupDialogs["HEALPLANNER_RESET_ALL"] = {
-    text = "Reset ALL variants of all dungeons?\n\nThis action is irreversible.",
-    button1 = YES,
-    button2 = NO,
-    OnAccept = function()
-        HR.ResetAllPlans()
-        local dungeon = HR.content[UI.selDungeon]
-        UI.OnDungeonSelected(dungeon and dungeon.id)
-        UI.RefreshRows()
-        HR:Print("All variants have been reset.")
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    showAlert = true,
-    preferredIndex = 3,     -- evite les conflits avec d'autres addons (taint)
-}
-
 -- (Profils : dialogs CUSTOM, pas de StaticPopup WoW. Cf. MakeSelect / BuildProfileNewModal
 --  / ConfirmDeleteProfile plus bas, modeles sur le select de variante.)
 
 --------------------------------------------------------------------------------
 -- Section C : lignes d'occurrences
 --------------------------------------------------------------------------------
-
--- Separateur de phase reutilisable : libelle "Phase N" + ligne doree a sa droite.
-local function AcquireSep(i)
-    local s = UI.phaseSeps[i]
-    if not s then
-        s = CreateFrame("Frame", nil, UI.listContent)
-        s:SetHeight(SEP_HEIGHT)
-
-        s.label = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        s.label:SetPoint("LEFT", 2, 0)
-
-        s.line = s:CreateTexture(nil, "ARTWORK")
-        s.line:SetColorTexture(1, 1, 1, 0.5)     -- dore semi-transparent
-        s.line:SetHeight(1)
-        s.line:SetPoint("LEFT", s.label, "RIGHT", 8, 0)
-        s.line:SetPoint("RIGHT", s, "RIGHT", -4, 0)
-
-        UI.phaseSeps[i] = s
-    end
-    s:Show()
-    return s
-end
 
 --------------------------------------------------------------------------------
 -- Section Trash Info : capacites de trash reduites par Zephyr (AoE)
@@ -160,122 +118,6 @@ function UI.UpdateListHighlight()
     if UI.trashButton then
         UI.trashButton:SetSelected(UI.viewTrash and true or false)
     end
-end
-
---------------------------------------------------------------------------------
--- Section "Defensive list" : tous les CD enregistres dans l'addon, par classe
---------------------------------------------------------------------------------
-
-local DEFLIST_ROW_H = 28
-local DEFLIST_ICON  = 24
-
--- Ligne reutilisable de la liste des defensifs : icone (tooltip au survol) + texte.
-local function AcquireDefListRow(i)
-    local row = UI.defListRows[i]
-    if not row then
-        row = CreateFrame("Frame", nil, UI.listContent)
-        row:SetHeight(DEFLIST_ROW_H)
-
-        row.iconFrame = CreateFrame("Frame", nil, row)
-        row.iconFrame:SetSize(DEFLIST_ICON, DEFLIST_ICON)
-        row.iconFrame:SetPoint("LEFT", 8, 0)
-        row.iconFrame:EnableMouse(true)
-        row.iconFrame:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            if self.itemId then
-                GameTooltip:SetItemByID(self.itemId)
-            elseif type(self.spellID) == "number" then
-                GameTooltip:SetSpellByID(self.spellID)
-            elseif self.tipText then
-                GameTooltip:SetText(self.tipText)
-            end
-            GameTooltip:Show()
-        end)
-        row.iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-        row.icon = row.iconFrame:CreateTexture(nil, "ARTWORK")
-        row.icon:SetAllPoints()
-        row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-        row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        row.name:SetPoint("LEFT", row.iconFrame, "RIGHT", 8, 0)
-        row.name:SetJustifyH("LEFT")
-
-        UI.defListRows[i] = row
-    end
-    row:Show()
-    return row
-end
-
--- Affiche TOUS les CD enregistres dans l'addon (raid HR.defensives + perso
--- HR.personalDefensives), groupes par classe (ordre alpha du nom de classe ;
--- "General" = sans classe en dernier), tries par nom dans chaque classe.
-function UI.RenderDefList()
-    local w = UI.scroll:GetWidth()
-    if not w or w < 50 then w = 820 end
-    UI.listContent:SetWidth(w)
-
-    local byClass = {}
-    local function add(key, d, personal)
-        local cls = d.class or "GENERAL"
-        byClass[cls] = byClass[cls] or {}
-        local tag
-        if d.specs then tag = table.concat(d.specs, "/")
-        elseif d.spec then tag = d.spec
-        elseif d.role then tag = d.role end
-        table.insert(byClass[cls], {
-            key      = key,
-            name     = d.name or tostring(key),
-            cooldown = d.cooldown or 0,
-            spellID  = (type(key) == "number") and key or d.spellID,
-            itemId   = d.itemId,
-            tag      = tag,
-            personal = personal,
-        })
-    end
-    for k, d in pairs(HR.defensives) do add(k, d, false) end
-    for k, d in pairs(HR.personalDefensives or {}) do add(k, d, true) end
-
-    local function clsName(c) return (c == "GENERAL") and "General"
-        or (HR.ClassName and HR.ClassName(c)) or c end
-    local classes = {}
-    for c in pairs(byClass) do classes[#classes + 1] = c end
-    table.sort(classes, function(a, b)
-        if (a == "GENERAL") ~= (b == "GENERAL") then return b == "GENERAL" end
-        return clsName(a) < clsName(b)
-    end)
-
-    local y, ri, si = 0, 0, 0
-    for _, cls in ipairs(classes) do
-        si = si + 1
-        local sep = AcquireSep(si)
-        sep:ClearAllPoints()
-        sep:SetPoint("TOPLEFT", 0, -y)
-        sep:SetPoint("TOPRIGHT", 0, -y)
-        sep.label:SetText(clsName(cls))
-        y = y + SEP_HEIGHT
-
-        local entries = byClass[cls]
-        table.sort(entries, function(a, b) return a.name < b.name end)
-        for _, e in ipairs(entries) do
-            ri = ri + 1
-            local row = AcquireDefListRow(ri)
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", 0, -y)
-            row:SetPoint("TOPRIGHT", 0, -y)
-            row.iconFrame.spellID = e.spellID
-            row.iconFrame.itemId  = e.itemId
-            row.iconFrame.tipText = e.name
-            row.icon:SetTexture(HR.GetDefensiveIcon(e.key))
-            local cd  = (e.cooldown > 0) and (" |cffffd100(" .. e.cooldown .. "s)|r")
-                or " |cff888888(no CD)|r"
-            local tag = e.tag and ("   |cff888888" .. e.tag .. "|r") or ""
-            local src = e.personal and "  |cff7f9fff[personal]|r" or ""
-            row.name:SetText(e.name .. cd .. tag .. src)
-            y = y + DEFLIST_ROW_H
-        end
-    end
-    UI.listContent:SetHeight(math.max(y, 1))
 end
 
 --------------------------------------------------------------------------------
@@ -1385,7 +1227,6 @@ end
 -- Disposition LARGE (etats Defs / Options) : zone compo + rangee de boss masquees,
 -- titre + scroll etales sur toute la largeur.
 local function WideLayout()
-    UI.SetVariantBarShown(false)
     if UI.specsPanel then UI.specsPanel:Hide() end
     if UI.bossRow then UI.bossRow:Hide() end
     UI.bossTitle:ClearAllPoints()
@@ -1403,7 +1244,7 @@ function UI.UpdateViewButtons()
     end
 end
 
--- Change de mode (nil = plan / "deflist"). Re-cliquer le
+-- Change de mode (nil = plan). Re-cliquer le
 -- mode actif revient au plan.
 function UI.SetViewMode(mode)
     if UI.viewMode == mode then mode = nil end
@@ -1414,7 +1255,6 @@ function UI.SetViewMode(mode)
         WideLayout()
     else
         RestorePlanLayout()
-        UI.RefreshVariantBar()
     end
     UI.UpdateViewButtons()
     UI.RefreshRows()
@@ -1671,9 +1511,7 @@ end
 function UI.RefreshRows()
     -- Cacher tous les enfants de la liste avant de choisir le mode d'affichage.
     for _, r in ipairs(UI.rows) do r:Hide() end
-    for _, s in ipairs(UI.phaseSeps) do s:Hide() end
     for _, t in ipairs(UI.trashRows) do t:Hide() end
-    for _, r in ipairs(UI.defListRows) do r:Hide() end
     for _, t in ipairs(UI.varTabs or {}) do t:Hide() end
     if UI.tlPlayBtn then UI.tlPlayBtn:Hide() end
     if UI.planMsg then UI.planMsg:Hide() end
@@ -1707,12 +1545,8 @@ function UI.RefreshRows()
         return
     end
 
-    -- Modes "vue liste" plein largeur (pas de plan) : Defensive list / Options.
-    if UI.viewMode == "deflist" then
-        UI.bossTitle:SetText("All defensive cooldowns by class")
-        UI.RenderDefList()
-        return
-    elseif UI.viewMode == "options" then
+    -- Vue "liste" plein largeur (pas de plan) : Options.
+    if UI.viewMode == "options" then
         -- Vue Settings "comme un donjon" : barre Settings en haut + fond dedie, le titre
         -- libre et le scroll du plan sont masques (la barre porte le titre + les onglets).
         UI.bossTitle:SetText("")
@@ -1950,7 +1784,7 @@ local function SelectDungeon(index)
     UI.RefreshBossList()
     local dungeon = HR.content[index]
     -- Etat partage lu par le panneau V2 (UI/HealerSpecs.lua). Posé ici en direct : c'etait
-    -- auparavant un effet de bord de UI.OnDungeonSelected (V1, barre de variantes masquee).
+    -- auparavant un effet de bord de UI.OnDungeonSelected (barre de variantes V1, supprimee).
     -- Le donjon courant V2 est pose separement par HR.SetCurrentV2Dungeon (dans RefreshRows).
     UI.activeDungeonID = dungeon and dungeon.id
     UI.RefreshRows()
@@ -2199,8 +2033,8 @@ local function Build()
     -- Outils : Options (roue) + FAQ, sous le separateur. Icones custom, SANS texte.
     -- (StyleToolButton et UI.viewButtons sont definis plus haut : le bouton Home, en tete
     -- de sidebar, est le premier a s'en servir.)
-    -- Onglet "Defs" (liste des defensifs) ARCHIVE : bouton retire de la barre d'outils
-    -- (le code de la vue "deflist" reste mais n'est plus accessible).
+    -- Onglet "Defs" (liste des defensifs) : bouton RETIRE de la barre d'outils, et le code
+    -- de la vue "deflist" a ete supprime le 2026-08-26 (il n'etait plus atteignable).
     local optBtn = NavButton({
         image   = HR.Asset("icon-wheel"),
         size    = NAV_ICON,                                       -- pas de texte (settings)
@@ -2225,10 +2059,6 @@ local function Build()
 
     UI.UpdateViewButtons()      -- etat initial (aucune vue active -> attenues)
 
-    -- Barre de variantes : construite pour sa couche DONNEES (init selHealer +
-    -- activeVariant), mais son UI est MASQUEE -> remplacee par le panneau "Healer specs".
-    UI.BuildVariantBar(body)
-    UI.SetVariantBarShown(false)
 
     -- Rangee HORIZONTALE de selection (nom du donjon + boss + Trash Info + Settings),
     -- TOUT EN HAUT du panneau.
@@ -2302,9 +2132,7 @@ local function Build()
     UI.scroll:SetScrollChild(UI.listContent)
 
     UI.rows = {}
-    UI.phaseSeps = {}
     UI.trashRows = {}
-    UI.defListRows = {}
 
     UI.frame = f
     HR.RestoreFramePos("config", f)     -- restaure la position memorisee
@@ -2331,8 +2159,6 @@ function UI.Toggle()
         local index = HR.GetCurrentDungeonIndex()
         SelectDungeon(index or UI.selDungeon or 1)
         if not index then UI.SetViewMode("home") end
-        -- Puis scanner le groupe pour activer la variante la plus proche.
-        UI.AutoSelectForGroup()
     end
 end
 
@@ -2353,8 +2179,8 @@ function UI.ShowHomePage()
     UI.frame:Raise()
 end
 
--- Ouvre la config sur un donjon precis et AFFICHE une variante (import de plan partage).
--- Aligne l'onglet de heal sur le profil de la variante puis la rend visible (lastSeen).
+-- Ouvre la config sur un donjon precis et AFFICHE une variante (import de plan partage) :
+-- la variante devient la `lastSeen` du donjon, donc celle que le panneau affiche.
 function UI.ShowDungeonVariant(dID, variant)
     if not UI.frame then Build() end
     if not UI.frame:IsShown() then
@@ -2365,12 +2191,8 @@ function UI.ShowDungeonVariant(dID, variant)
     for i, d in ipairs(HR.content) do if d.id == dID then index = i; break end end
     if index then SelectDungeon(index) end
     if variant then
-        -- Onglet de heal du plan importe. Uniquement pour un VRAI profil : une variante sans
-        -- heal (HR.NO_HEALER) ne correspond a aucun onglet -> on garde l'onglet courant.
-        if HR.GetHealProfile(variant.healer) then UI.selHealer = variant.healer end
         HR.SelectVariant(variant.id, dID)                          -- lastSeen = variante importee
     end
-    if UI.RefreshHealerTabs then UI.RefreshHealerTabs() end
     UI.RefreshRows()
     UI.frame:Raise()
 end

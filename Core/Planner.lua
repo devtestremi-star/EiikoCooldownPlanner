@@ -122,14 +122,6 @@ local function GenerateFromPhases(boss, fightLength)
     return list
 end
 
--- Le boss a-t-il une timeline exploitable (representation `abilities` OU `phases`) ?
-function HR.BossHasTimeline(boss)
-    if not boss then return false end
-    if boss.phases and #boss.phases > 0 then return true end
-    if boss.abilities and #boss.abilities > 0 then return true end
-    return false
-end
-
 -- Genere la liste chronologique des occurrences sur `fightLength` secondes.
 -- Dispatche selon la representation du boss : `phases` (riche) sinon `abilities`.
 function HR.GenerateOccurrences(boss, fightLength)

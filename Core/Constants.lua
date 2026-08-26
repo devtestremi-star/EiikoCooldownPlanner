@@ -31,7 +31,6 @@ HR.FIGHT_LENGTH = 300
 HR.DB_DEFAULTS = {
     enabled = true,
     debug = false,      -- messages de debug (persiste le flag de session HR.debug)
-    minimap = { hide = false },
     -- "What's new" : derniere VERSION pour laquelle la modale a ete masquee (case cochee).
     -- account-wide (racine, hors profil). Differente de HR.VERSION => modale re-affichee a l'init.
     whatsNewVersion = "",
@@ -40,10 +39,9 @@ HR.DB_DEFAULTS = {
     -- re-proposer la touche) et account-wide -> un joueur qui efface volontairement le
     -- raccourci ne le voit jamais revenir, y compris sur un autre personnage.
     keybindSeeded = false,
-    -- Variantes de plan par donjon. dungeons[dungeonID] = { usedVariant, variants }.
-    dungeons = {},
-    nextVariantId = 1,  -- compteur d'ID de variante (unique, stable)
-    plans = {},         -- ANCIEN store (par encounterID) : conserve pour migration
+    -- (Les plans NE SONT PAS ici : ils vivent dans ECPlannerDB / HR.db2, cf. Core/Plan2.lua.
+    --  Les anciennes cles V1 `dungeons` / `nextVariantId` / `plans` ont ete retirees le
+    --  2026-08-26 avec Core/Plans.lua, leur unique lecteur.)
     -- Reglages joueur par sort de boss (case Activer / nom custom / son) :
     -- bossSpells[encounterID][spellID] = { enabled, name, playSound, sound }
     bossSpells = {},
@@ -57,17 +55,10 @@ HR.DB_DEFAULTS = {
     healerDefaults = {},-- placements EDITES des variantes par defaut : [profileKey] = assignments
     options = {         -- reglages d'affichage de la boite runtime
         uiScale        = 1.0,                 -- echelle de la fenetre principale + modales (PAS le runtime)
-        hideOOC        = true,                -- masque (alpha 0) hors combat / hors encounter
         variantSpecOnly = false,              -- popup de variantes : n'afficher que les variantes de la SPE heal active du joueur
         showSyncedPlans = false,              -- popup de variantes : afficher UNIQUEMENT les plans recus par sync (bypasse variantSpecOnly)
         upcomingEnabled = true,               -- Upcoming bar affichee (independante de la Timeline)
-        upcomingHideNext = false,             -- masquer le "what's next" (container 1 : prochain sort)
-        upcomingHideName = false,             -- masquer le nom du sort de boss dans l'Upcoming bar
         upcomingThreshold = 5,                -- (s) fenetre avant le hit ou la box s'affiche (3-15)
-        upcomingMineOnly = false,             -- ne montrer que les defensifs du joueur (sa classe)
-        upcomingPlayerCDs = true,             -- afficher le container 2 (CD perso + external du joueur)
-        upcomingScale  = 1.0,
-        upcomingBg     = { 0, 0, 0, 0.85 },   -- couleur de fond {r,g,b,a}
         upcomingVertical = false,             -- Personal Timeline en COLONNE (true) au lieu de RANGEE (false)
         upcomingHeals    = false,             -- afficher aussi les CD de HEAL du joueur (healer only)
         upcomingMax      = 0,                 -- Personal Timeline : nb max de sorts A VENIR affiches (0 = tous)
@@ -78,8 +69,6 @@ HR.DB_DEFAULTS = {
         commReverse   = false,                 -- inverse l'ordre des boutons
         commNonHealer = false,                 -- afficher la comm bar meme en role NON-soigneur
         commPing      = true,                  -- clic sur un CD = ping natif "assist" du proprietaire (en plus du /p)
-        commScale     = 1.0,
-        commBg        = { 0, 0, 0, 0.6 },      -- couleur de fond de la communication bar
         -- Announcement : icones ACCUMULEES (une par defensif "mien" sous le seuil), timer overlay
         -- AU CENTRE de chaque icone. Plus aucun texte de nom. Couleur du timer = compo "announce"
         -- textColor. Rangee horizontale centree (ancre haut-centre).
@@ -96,9 +85,6 @@ HR.DB_DEFAULTS = {
         -- actif, remplace l'Upcoming bar (cf. UI/TimelineBox.lua).
         timelineMode      = false,             -- bascule entre Upcoming bar et Timeline
         timelineWindow    = 30,                -- fenetre d'anticipation affichee (s)
-        timelineScale     = 1.0,
-        timelineTextColor = { 1, 1, 1 },       -- couleur du compte a rebours (centre de l'icone)
-        timelineTextSize  = 14,                -- taille du compte a rebours
         -- Progress bars : representation ALTERNATIVE de la timeline, INDEPENDANTE de la timeline
         -- d'icones (on peut afficher les DEUX ; plus d'exclusivite, cf. UI/ProgressBars.lua).
         -- Consomme le MEME producteur (HR.Runtime.TimelineBossEvents). Placement/resize en mode test.

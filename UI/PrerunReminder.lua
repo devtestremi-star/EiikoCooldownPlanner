@@ -130,7 +130,3 @@ function UI.ShowPrerunReminder(dID)
     f:Show(); f:Raise()
     HR.ClampToScreen(f)                  -- garde-fou : recadre si position memorisee hors ecran
 end
-
-function UI.ClosePrerunReminder()
-    if UI.prerun then UI.prerun:Hide() end
-end

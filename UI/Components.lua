@@ -636,8 +636,9 @@ end
 
 -- Registre (cles faibles) des fenetres/modales de l'addon a RESCALER ensemble (option
 -- "Scale", onglet General). N'inclut PAS les elements runtime (timeline/upcoming/comm/
--- announce), qui ont chacun leur propre echelle. C.Window s'y enregistre auto ; les modales
--- en CreateFrame brut (VariantBar) appellent HR.RegisterScaledFrame elles-memes.
+-- announce), qui ont chacun leur propre echelle. C.Window s'y enregistre AUTO -- c'est
+-- aujourd'hui le SEUL inscrivant ; une modale batie en CreateFrame brut devrait appeler
+-- HR.RegisterScaledFrame elle-meme.
 HR._scaledFrames = HR._scaledFrames or setmetatable({}, { __mode = "k" })
 local function CurrentUIScale()
     return (HR.db and HR.db.options and HR.db.options.uiScale) or 1
@@ -1087,100 +1088,4 @@ function C.Chip(parent, opts)
     f._maxW = opts.maxWidth
     f:SetText(opts.text)
     return f
-end
-
---------------------------------------------------------------------------------
--- Demo : fenetre montrant les 3 boutons (verification visuelle in-game).
---   Appel : /ecp uidemo   (ou re-appel pour fermer)
---------------------------------------------------------------------------------
-
-function C.ShowDemo()
-    if C.demo then
-        C.demo:SetShown(not C.demo:IsShown())
-        return
-    end
-
-    local f = CreateFrame("Frame", "ECPComponentsDemo", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(360, 260)
-    f:SetPoint("CENTER")
-    f:SetFrameStrata("DIALOG")
-    f:SetMovable(true)
-    f:EnableMouse(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop", f.StopMovingOrSizing)
-    tinsert(UISpecialFrames, "ECPComponentsDemo")
-    if f.TitleText then f.TitleText:SetText("Components demo") end
-
-    local function caption(text, x, y)
-        local fs = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        fs:SetPoint("TOPLEFT", x, y)
-        fs:SetText(text)
-        return fs
-    end
-
-    -- 1. ImageButton (image + texte overlay).
-    caption("1. ImageButton", 20, -36)
-    local img = C.ImageButton(f, {
-        image = "Interface\\Icons\\spell_holy_renew",
-        text  = "5",
-        size  = 44,
-        onClick = function() HR:Print("ImageButton clicked") end,
-    })
-    img:SetPoint("TOPLEFT", 20, -54)
-
-    -- 2a. TextButton arrondi (selectionnable, bordure jaune si actif).
-    caption("2a. TextButton (rounded)", 130, -36)
-    local txt = C.TextButton(f, {
-        text = "Variant A",
-        width = 110,
-        onClick = function(self) self:SetSelected(not self:IsSelected()) end,
-    })
-    txt:SetPoint("TOPLEFT", 130, -54)
-    txt:SetSelected(true)
-
-    -- 2b. TextButton "square" (coins droits, plus d'espace).
-    caption("2b. TextButton (square)", 130, -96)
-    local txt2 = C.TextButton(f, {
-        text = "Variant B",
-        square = true,
-        onClick = function(self) self:SetSelected(not self:IsSelected()) end,
-    })
-    txt2:SetPoint("TOPLEFT", 130, -114)
-
-    -- 3. PlusButton (bordure pointillee).
-    caption("3. PlusButton", 20, -120)
-    local plus = C.PlusButton(f, {
-        size = 40,
-        onClick = function() HR:Print("PlusButton clicked") end,
-    })
-    plus:SetPoint("TOPLEFT", 20, -138)
-
-    C.demo = f
-end
-
--- Demo de la frame principale custom (grid + bordure noire + gros titre).
---   Appel : /ecp uidemo win
-function C.ShowWindowDemo()
-    if C.winDemo then
-        C.winDemo:SetShown(not C.winDemo:IsShown())
-        return
-    end
-    local w = C.Window(UIParent, {
-        name   = "ECPWindowDemo",
-        title  = "EiikoCooldownPlanner",
-        width  = 1144,    -- 880 +30%
-        height = 759,     -- 584 +30%
-    })
-    tinsert(UISpecialFrames, "ECPWindowDemo")
-
-    -- Un peu de contenu d'exemple dans la zone `.content`.
-    local hint = w.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    hint:SetPoint("TOPLEFT", 16, -16)
-    hint:SetText("Zone de contenu (window.content) - le plan / les onglets viendront ici.")
-
-    local b = C.TextButton(w.content, { text = "Sample", square = true })
-    b:SetPoint("TOPLEFT", 16, -48)
-
-    C.winDemo = w
 end

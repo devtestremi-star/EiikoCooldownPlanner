@@ -126,9 +126,9 @@ HR.defensives = {
                  icon = "Interface\\Icons\\spell_holy_prayerofhealing02" },
 }
 
--- Defensifs PERSONNELS par classe/spe. Table SEPAREE de HR.defensives : role = "personal"
--- ne correspond a aucun HR.COMP_SLOTS, donc ces sorts ne passent pas le filtre de compo et
--- ne polluent pas le picker. Usage runtime : quand le heal place l'appel generique unique
+-- Defensifs PERSONNELS par classe/spe. Table SEPAREE de HR.defensives : le role "personal"
+-- n'est pas un role de groupe (TANK/HEALER/DPS), donc ces sorts ne passent pas les filtres
+-- par role et ne polluent pas le picker. Usage runtime : quand le heal place l'appel generique unique
 -- SMALL_DEF, on resout LE sort perso du joueur (filtre classe + spe courante) via
 -- HR.GetPersonalDefensives() -> [1].
 -- Format : [spellID] = { name, cooldown = <s>, class = "TOKEN", [specs = { "SpecName", ... }], [main] }.

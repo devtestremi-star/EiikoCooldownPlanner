@@ -38,28 +38,13 @@ function HR.SaveFramePos(key, frame)
     end
 end
 
--- Memorise la position d'une fenetre en l'ancrant TOUJOURS par le coin HAUT-DROIT
--- (TOPRIGHT de UIParent). Re-ancre la frame sans la deplacer visuellement, puis
--- enregistre l'offset : le point de reference reste le coin haut-droit (utile pour
--- les boites runtime/comm, qui doivent rester collees au coin sup. droit de l'ecran).
-function HR.SaveFramePosTopRight(key, frame)
-    if not HR.db or not frame then return end
-    HR.db.ui = HR.db.ui or {}
-    local fRight, fTop = frame:GetRight(), frame:GetTop()
-    if not fRight or not fTop then return end
-    -- L'offset SetPoint est exprime dans l'echelle propre de la frame (les boites ont
-    -- leur propre SetScale). On convertit le coin de UIParent dans cette echelle.
-    local ratio = UIParent:GetEffectiveScale() / frame:GetEffectiveScale()
-    local x = fRight - UIParent:GetRight() * ratio
-    local y = fTop  - UIParent:GetTop()   * ratio
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", x, y)
-    HR.db.ui[key] = { point = "TOPRIGHT", relPoint = "TOPRIGHT", x = x, y = y }
-end
-
--- Comme SaveFramePosTopRight mais ancre par le coin HAUT-GAUCHE (TOPLEFT). Utile pour une
--- barre dont le CONTENU part du haut-gauche (ex. comm bar) : ainsi rescale/resize gardent le
--- coin haut-gauche fixe (sinon le contenu glisse). Re-ancre sans deplacer, puis memorise.
+-- Memorise la position d'une fenetre en l'ancrant par le coin HAUT-GAUCHE (TOPLEFT de
+-- UIParent) : le CONTENU part du haut-gauche, donc rescale/resize gardent ce coin fixe
+-- (sinon le contenu glisse). Re-ancre sans deplacer visuellement, puis memorise l'offset.
+-- C'est l'ancre HARMONISEE de toutes les fenetres HUD au drag/reset ; l'exception est la
+-- banniere d'annonce, centree, qui passe par SaveFramePosTop.
+-- (Une variante TOPRIGHT a existe : supprimee, plus aucun appelant. RestoreFramePos reste
+-- compatible en LECTURE avec les positions TOPRIGHT deja enregistrees chez les joueurs.)
 function HR.SaveFramePosTopLeft(key, frame)
     if not HR.db or not frame then return end
     HR.db.ui = HR.db.ui or {}

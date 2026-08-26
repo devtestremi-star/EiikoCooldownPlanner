@@ -23,32 +23,34 @@ local FALLBACK = 134400     -- icone "?" si cle inconnue / entree vide
 A.registry = {
     ["mainframe-bg"]  = { file = "mainframe-bg.tga" },
 
-    -- Fond de la zone de contenu PAR DONJON : une entree par shortname (abbr). Le nom
-    -- de fichier CORRESPOND a la cle d'asset (bg-<ABBR>.tga) et est range par version de
-    -- pool : Media\Background\<VER>\bg-<ABBR>.tga (absent/illisible => transparent).
-    -- cf. UI.UpdateContentBg ("bg-" .. dungeon.abbr).
+    -- Fond de la zone de contenu PAR DONJON : une entree par shortname (abbr), rangee par
+    -- version de pool : Media\Background\<VER>\bg-<abbr>.tga (absent/illisible => transparent).
+    -- cf. UI.UpdateContentBg ("bg-" .. dungeon.abbr) et UI/HomePage.dungeonArt.
+    -- ⚠️ La CLE est en MAJUSCULES (elle vient de dungeon.abbr) mais le NOM DE FICHIER est en
+    -- MINUSCULES. Les deux ne se correspondent donc PAS : respecter la casse REELLE du fichier
+    -- sur le disque. Windows ne voit pas la difference, un client Mac affiche un fond vide --
+    -- c'etait le cas des 8 fonds du pool 12.1.0 jusqu'au 2026-08-26.
     -- Pool 12.1.0
-    ["bg-AOF"]  = { file = "Background\\1210\\bg-AOF.tga" },   -- Altar of Fangs
-    ["bg-RLP"]  = { file = "Background\\1210\\bg-RLP.tga" },   -- Ruby Life Pools
-    ["bg-TOS"]  = { file = "Background\\1210\\bg-TOS.tga" },   -- Temple of Sethraliss
-    ["bg-KR"]   = { file = "Background\\1210\\bg-KR.tga" },    -- Kings' Rest
-    ["bg-TBV"]  = { file = "Background\\1210\\bg-TBV.tga" },   -- The Blinding Vale
-    ["bg-VA"]   = { file = "Background\\1210\\bg-VA.tga" },    -- Voidscar Arena
-    ["bg-DON"]  = { file = "Background\\1210\\bg-DON.tga" },   -- Den of Nalorakk
-    ["bg-MR"]   = { file = "Background\\1210\\bg-MR.tga" },    -- Murder Row
-    -- Pool 12.0.7 (saison precedente, conserve pour retro-compat de lecture)
-    ["bg-WRS"]  = { file = "Background\\1207\\bg-WRS.tga" },   -- Windrunner Spire
-    ["bg-MC"]   = { file = "Background\\1207\\bg-MC.tga" },    -- Maisara Caverns
-    ["bg-NPX"]  = { file = "Background\\1207\\bg-NPX.tga" },   -- Nexus-Point Xenas
-    ["bg-MT"]   = { file = "Background\\1207\\bg-MT.tga" },    -- Magister's Terrace
-    ["bg-AA"]   = { file = "Background\\1207\\bg-AA.tga" },    -- Algeth'ar Academy
-    ["bg-SEAT"] = { file = "Background\\1207\\bg-SEAT.tga" },  -- Seat of the Triumvirate
-    ["bg-SR"]   = { file = "Background\\1207\\bg-SR.tga" },    -- Skyreach
-    ["bg-PIT"]  = { file = "Background\\1207\\bg-PIT.tga" },   -- Pit of Saron
+    ["bg-AOF"]  = { file = "Background\\1210\\bg-aof.tga" },   -- Altar of Fangs
+    ["bg-RLP"]  = { file = "Background\\1210\\bg-rlp.tga" },   -- Ruby Life Pools
+    ["bg-TOS"]  = { file = "Background\\1210\\bg-tos.tga" },   -- Temple of Sethraliss
+    ["bg-KR"]   = { file = "Background\\1210\\bg-kr.tga" },    -- Kings' Rest
+    ["bg-TBV"]  = { file = "Background\\1210\\bg-tbv.tga" },   -- The Blinding Vale
+    ["bg-VA"]   = { file = "Background\\1210\\bg-va.tga" },    -- Voidscar Arena
+    ["bg-DON"]  = { file = "Background\\1210\\bg-don.tga" },   -- Den of Nalorakk
+    ["bg-MR"]   = { file = "Background\\1210\\bg-mr.tga" },    -- Murder Row
+    -- (Pool 12.0.7 : fonds SUPPRIMES le 2026-08-26 avec les assets de la saison precedente.
+    --  ⚠️ PORTEE REELLE, plus large qu'il n'y parait : `HR.content =
+    --  HR.contentByVersion[CLIENT_VERSION] or HR.content` (Data/Content.lua) retombe sur le
+    --  pool 12.0.7 pour TOUT build non liste -- donc un futur 12.1.1 sert la liste 12.0.7,
+    --  desormais SANS fond. Degradation propre (UI.UpdateContentBg et UI/HomePage.dungeonArt
+    --  testent la cle avant de poser la texture : ni erreur, ni icone "?"), mais visible.
+    --  Le vrai correctif est d'ajouter une entree dans contentByVersion a chaque build cible.)
 
     -- Fond de la vue SETTINGS (Media\Background\bg-1.tga ; absent => transparent).
     ["bg-settings"] = { file = "Background\\bg-1.tga" },
-    -- Fond de la modale "Nouvelle variante" (Media\Background\bg-2.tga ; cover, cf. VariantBar).
+    -- Fond des modales de plan (Media\Background\bg-2.tga ; cover). Consommateurs :
+    -- UI/HealerSpecs.lua (New/Duplicate/Export/Import), UI/SyncFrame.lua, UI/WhatsNew.lua.
     ["bg-variant"]  = { file = "Background\\bg-2.tga" },
     -- Fond generique bg-1 (Media\Background\bg-1.tga ; absent => transparent).
     ["bg-1"]        = { file = "Background\\bg-1.tga" },
@@ -83,12 +85,6 @@ function A.Path(key)
     if e.path   then return e.path end
     if e.fileID then return e.fileID end
     return FALLBACK
-end
-
--- L'asset est-il un atlas Blizzard ?
-function A.IsAtlas(key)
-    local e = A.registry[key]
-    return (e and e.atlas) ~= nil
 end
 
 -- Applique l'asset a une Texture (gere fichier/chemin/fileID ET atlas).

@@ -7,8 +7,6 @@
 --   roles   -> Interface\LFGFrame\UI-LFG-ICON-PORTRAITROLES (coords standard)
 local addonName, HR = ...
 
--- Ordre des slots de la barre de composition.
-HR.COMP_SLOTS = { "TANK", "HEALER", "DPS", "DPS", "DPS" }
 
 -- Classes capables de tenir chaque role (source : guides de classe Midnight).
 HR.ROLE_CLASSES = {
@@ -17,12 +15,6 @@ HR.ROLE_CLASSES = {
     DPS    = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT",
                "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" },
 }
-
--- Libelle court d'un role pour l'UI.
-local ROLE_LABEL = { TANK = "Tank", HEALER = "Heal", DPS = "DPS" }
-function HR.RoleLabel(role)
-    return ROLE_LABEL[role] or role
-end
 
 --------------------------------------------------------------------------------
 -- Icones de classe
@@ -180,12 +172,6 @@ function HR.HealProfileKey(class, spec)
     return class
 end
 
--- Clef de profil de heal d'une variante (depuis comp[2] + v.spec).
-function HR.VariantHealKey(v)
-    if not v or not v.comp then return nil end
-    return HR.HealProfileKey(v.comp[2], v.spec)
-end
-
 -- Icone d'un profil de heal : icone de SPE (via specID), repli sur p.icon explicite,
 -- puis sur l'icone de classe si rien n'est resolvable.
 function HR.HealProfileIcon(p)
@@ -229,57 +215,9 @@ local ROLE_TCOORDS = {
     DPS    = { 20, 39, 22, 41 },
 }
 
--- Sequence |T...|t de l'icone d'un role.
-function HR.RoleIconMarkup(role, size)
-    size = size or 14
-    local c = ROLE_TCOORDS[role]
-    if not c then return "" end
-    return string.format("|T%s:%d:%d:0:0:64:64:%d:%d:%d:%d|t",
-        ROLE_ICON_TEX, size, size, c[1], c[2], c[3], c[4])
-end
-
--- Sequence |T...|t de l'icone d'un role GRISEE (teinte sombre), pour un slot vide.
-function HR.RoleIconMarkupGrey(role, size)
-    size = size or 14
-    local c = ROLE_TCOORDS[role]
-    if not c then return "" end
-    return string.format("|T%s:%d:%d:0:0:64:64:%d:%d:%d:%d:80:80:80|t",
-        ROLE_ICON_TEX, size, size, c[1], c[2], c[3], c[4])
-end
-
 --------------------------------------------------------------------------------
 -- Composition du groupe (live) et signature
 --------------------------------------------------------------------------------
-
--- Composition du groupe reel, alignee sur HR.COMP_SLOTS : { tank, heal, dps, dps, dps }
--- (jetons de classe). Roles via UnitGroupRolesAssigned, classe via UnitClass.
--- Best-effort : roles non assignes -> ranges en DPS ; trous laisses a nil.
-function HR.GetGroupComp()
-    local comp = {}
-    local dpsIdx = 3
-    local function add(unit)
-        if not UnitExists(unit) then return end
-        local _, class = UnitClass(unit)
-        if not class then return end
-        local role = UnitGroupRolesAssigned(unit)
-        if role == "TANK" and not comp[1] then
-            comp[1] = class
-        elseif role == "HEALER" and not comp[2] then
-            comp[2] = class
-        elseif dpsIdx <= 5 then
-            comp[dpsIdx] = class
-            dpsIdx = dpsIdx + 1
-        end
-    end
-    add("player")
-    local n = GetNumGroupMembers() or 0
-    if IsInRaid() then
-        for i = 1, n do add("raid" .. i) end
-    elseif IsInGroup() then
-        for i = 1, n - 1 do add("party" .. i) end
-    end
-    return comp
-end
 
 -- Role du joueur deduit de sa SPEC ACTIVE (fiable, contrairement au role assigne
 -- en donjon) : "TANK" / "HEALER" / "DAMAGER". nil si la spec n'est pas encore lue.
@@ -298,28 +236,4 @@ function HR.GetPlayerSpecName()
     if not idx then return nil end
     local _, name = GetSpecializationInfo(idx)
     return name
-end
-
--- Trie une compo positionnelle : groupe par role (ordre de HR.COMP_SLOTS) puis,
--- DANS chaque role, par jeton de classe (alpha). Renvoie une nouvelle compo.
--- Ex (tank=Druide, heal=Monk, dps={Warrior,Hunter,Mage}) -> dps tries {Hunter,Mage,Warrior}.
-function HR.SortComp(comp)
-    local byRole = { TANK = {}, HEALER = {}, DPS = {} }
-    for i = 1, #HR.COMP_SLOTS do
-        local cls = comp and comp[i]
-        if cls then
-            local g = byRole[HR.COMP_SLOTS[i]]
-            if g then g[#g + 1] = cls end
-        end
-    end
-    table.sort(byRole.TANK)
-    table.sort(byRole.HEALER)
-    table.sort(byRole.DPS)
-    local out, idx = {}, { TANK = 1, HEALER = 1, DPS = 1 }
-    for i = 1, #HR.COMP_SLOTS do
-        local role = HR.COMP_SLOTS[i]
-        out[i] = byRole[role][idx[role]]
-        idx[role] = idx[role] + 1
-    end
-    return out
 end

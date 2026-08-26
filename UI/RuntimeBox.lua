@@ -1123,10 +1123,13 @@ function HR.Runtime.StartLive(encounterID)
     if not boss then return false end
     boss = HR.ResolveBossTimeline(boss)   -- timeline de la variante active (no-op si aucune)
     local passthrough = not HR.BossEnabled(boss)
-    -- Variante ACTIVE (V2, PAR DONJON) du donjon du combat ; repli sur l'ancien systeme.
-    local variant = (dungeon and HR.GetV2Used(dungeon.id))
-        or (dungeon and HR.GetUsedVariant(dungeon.id))
-        or (dungeon and HR.GetVariants(dungeon.id)[1])
+    -- Variante ACTIVE (V2, PAR DONJON) du donjon du combat. AUCUN REPLI, volontairement :
+    -- HR.GetV2Used resout "Use" puis "Default" pour MA spe, et rend nil si le joueur n'a rien
+    -- choisi -- le pull affiche alors la timeline du boss SANS defensif. Ne pas rajouter un
+    -- "sinon la 1re variante" : ce serait appliquer en combat un plan d'une autre spe, avec
+    -- des defensifs que le joueur n'a pas (cf. l'en-tete de HR.GetV2Used, qui l'interdit).
+    -- Le repli "1re variante" existe ailleurs, pour l'AFFICHAGE editable seul (GetActiveVariant).
+    local variant = dungeon and HR.GetV2Used(dungeon.id)
     local rawOccs = passthrough and {} or HR.GenerateOccurrences(boss, HR.FIGHT_LENGTH)
     local planned = passthrough and {} or HR.FilterTimeline(rawOccs)
     DevDumpTimeline("StartLive", boss, rawOccs, planned)

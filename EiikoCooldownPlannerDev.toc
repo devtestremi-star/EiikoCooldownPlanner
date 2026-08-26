@@ -37,7 +37,6 @@ Data\Roster.lua
 Data\HealerDefaults.lua
 
 Core\Planner.lua
-Core\Plans.lua
 Core\Plan2.lua
 Core\ShareText.lua
 Core\BossSettings.lua
@@ -50,7 +49,6 @@ UI\HomePage.lua
 UI\HealerSpecs.lua
 UI\ImportText.lua
 UI\PlanTimeline.lua
-UI\VariantBar.lua
 UI\SyncFrame.lua
 UI\WhatsNew.lua
 UI\PrerunReminder.lua

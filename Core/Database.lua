@@ -79,14 +79,15 @@ function HR:InitDB()
         def.assignments = self.db.healerDefaults[key]   -- lecture/ecriture directe dans la DB
     end
 
-    -- V1 ABANDONNE : on supprime les variantes de l'ancien format (HealPlannerDB). Les
-    -- variantes V2 (ECPlannerDB / HR.db2) sont une SavedVariable distincte -> intactes.
-    -- (Plus de HR.MigratePlans : il repeuplerait V1 depuis les vieux plans plats.)
-    HealPlannerDB.dungeons      = {}
-    HealPlannerDB.plans         = {}    -- ancien store plat (V0), abandonne aussi
-    HealPlannerDB.nextVariantId = 1
+    -- V1 SUPPRIME (2026-08-26). Les cles `dungeons` / `plans` / `nextVariantId` de
+    -- HealPlannerDB ne sont plus ni declarees, ni lues, ni ecrites : Core/Plans.lua, leur
+    -- unique lecteur, a disparu. On ne les PURGE pas non plus -- celles qui trainent encore
+    -- chez un joueur y restent, invisibles : ecrire dans sa DB pour gagner quelques octets
+    -- d'un store que plus personne ne lit ne vaut pas la regle qu'on enfreindrait.
+    -- ⚠️ NE PAS confondre avec HR.db2.dungeons (ECPlannerDB) : meme nom de cle, SavedVariable
+    -- differente, et c'est LUI le store des plans (Core/Plan2.lua).
 
-    self:Debug("DB initialized, known variants:", HR.CountPlans())
+    self:Debug("DB initialized.")
 end
 
 --------------------------------------------------------------------------------
@@ -169,15 +170,9 @@ function HR.CreateProfile(name, copyFrom)
     return true
 end
 
--- Renomme un profil (met a jour le pointeur actif si besoin). Renvoie true si ok.
-function HR.RenameProfile(old, new)
-    new = new and strtrim(new) or ""
-    if not HR.db or not HR.db.profiles[old] or new == "" or HR.db.profiles[new] then return false end
-    HR.db.profiles[new] = HR.db.profiles[old]
-    HR.db.profiles[old] = nil
-    if HR.charDB and HR.charDB.profile == old then HR.charDB.profile = new; HR.activeProfile = new end
-    return true
-end
+-- (Pas de renommage de profil : l'API existait mais n'a jamais ete branchee dans l'onglet
+-- Profile, supprimee le 2026-08-26. Si le besoin revient, c'est une feature a part entiere --
+-- pas seulement la fonction, mais la modale et le point d'entree dans le select.)
 
 -- Supprime un profil (jamais le dernier). Renvoie "reload" si l'actif a change (besoin reload),
 -- "deleted" si simple suppression, false sinon.
