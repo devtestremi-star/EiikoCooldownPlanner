@@ -48,7 +48,7 @@ UI\HealerSpecs.lua
 UI\ImportText.lua
 UI\PlanTimeline.lua
 UI\VariantBar.lua
-UI\ShareFrame.lua
+UI\SyncFrame.lua
 UI\WhatsNew.lua
 UI\PrerunReminder.lua
 
@@ -60,6 +60,17 @@ Core\Keystones.lua
 Core\Capture.lua
 Core\Macros.lua
 Core\Share.lua
+
+# Canal de SYNCHRO (prefixe ECPSync) : bus d'evenements interne + transport.
+# Listeners.lua est le SEUL site d'enregistrement de listeners ; le code metier
+# ne fait que HR.EmitEvent(HR.EV.*, payload). Ordre impose : Bus avant Net avant
+# Handshake avant Listeners (et tout apres Core\Events.lua, qui definit RegisterEvent).
+Core\Sync\Bus.lua
+Core\Sync\Net.lua
+Core\Sync\Handshake.lua
+Core\Sync\PlanSync.lua
+Core\Sync\Listeners.lua
+
 Core\ForeignBars.lua
 
 UI\RuntimeBox.lua

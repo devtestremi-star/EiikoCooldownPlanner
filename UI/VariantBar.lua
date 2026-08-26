@@ -447,17 +447,6 @@ function UI.BuildVariantBar(f)
         end
     end)
 
-    -- Bouton "Partager" : diffuse la variante active au groupe/raid (lien cliquable).
-    UI.varShare = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    UI.varShare:SetSize(80, 22)
-    UI.varShare:SetPoint("TOPLEFT", 540, -48)
-    UI.varShare:SetText("Share")
-    UI.varShare:SetScript("OnClick", function()
-        if UI.activeVariant and UI.activeDungeonID and HR.Share then
-            HR.Share.ShareVariant(UI.activeDungeonID, UI.activeVariant)
-        end
-    end)
-
     -- Selecteur de PROFIL de heal (icones, facon onglets de donjon) : un onglet par
     -- profil (le pretre en a deux : Discipline + Holy, avec icone de spe). Filtre les
     -- variantes affichees et la variante par defaut proposee.
@@ -511,7 +500,7 @@ function UI.BuildVariantBar(f)
     -- (vue "Defensive list" : on remplace variantes + plan par la liste des CD).
     UI.varWidgets = {
         UI.variantDropdown, UI.varNew, UI.varDup, UI.varRename, UI.varDelete,
-        UI.varUse, UI.varReset, UI.varShare,
+        UI.varUse, UI.varReset,
     }
     for _, t in ipairs(UI.healerTabs) do UI.varWidgets[#UI.varWidgets + 1] = t end
 end
@@ -541,7 +530,6 @@ function UI.RefreshVariantBar()
     UI.varRename:SetEnabled(has and not isDefault)  -- defaut : non renommable
     UI.varDelete:SetEnabled(has and not isDefault)  -- defaut : non supprimable
     UI.varUse:SetEnabled(has)
-    if UI.varShare then UI.varShare:SetEnabled(has) end   -- partage : toute variante active
     -- Reset : variante editable dont le profil de heal a un plan de base.
     local canReset = has and not isDefault
         and HR.healerDefaults[HR.VariantHealKey(v)] ~= nil

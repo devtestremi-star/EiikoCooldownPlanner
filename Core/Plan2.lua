@@ -455,6 +455,13 @@ end
 
 -- Duplique la variante active (compo defensive + plan EXACTS) avec un nouveau nom.
 -- (V2_ : evite la collision avec l'ancien HR.DuplicateVariant de Plans.lua.)
+--
+-- ⚠️ La copie est l'oeuvre de CELUI QUI DUPLIQUE : les marqueurs de synchro (`synced`,
+-- `syncFrom`) ne doivent JAMAIS etre repris. Les recopier ferait deux degats : la copie
+-- resterait bloquee au bouton Sync (gate d'emission : on ne pousse que son propre plan),
+-- et elle serait ecrasee a la prochaine poussee de l'auteur d'origine. C'est justement
+-- l'echappatoire offerte au joueur qui veut personnaliser un plan recu. La construction
+-- CHAMP PAR CHAMP ci-dessous garantit ca -- ne pas la remplacer par un DeepCopy(cur).
 function HR.V2_DuplicateVariant(name)
     local cur = HR.GetActiveVariant()
     if not cur then return nil end
@@ -466,6 +473,7 @@ function HR.V2_DuplicateVariant(name)
         externals    = HR.DeepCopy(cur.externals or {}),
         talentSpells = HR.DeepCopy(cur.talentSpells or {}),
         assignments  = HR.DeepCopy(cur.assignments or {}),
+        -- PAS de `synced` ni de `syncFrom` : cf. l'avertissement ci-dessus.
     }
     s.variants[id] = v
     s.lastSeen = id

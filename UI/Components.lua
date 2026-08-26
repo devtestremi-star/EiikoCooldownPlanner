@@ -45,11 +45,20 @@ local TOOLTIP_BORDER = "Interface\\Tooltips\\UI-Tooltip-Border"
 local WHITE8X8       = "Interface\\Buttons\\WHITE8x8"
 
 -- Petit utilitaire : applique un script OnClick qui appelle self._onClick(self, mouseButton).
-local function WireOnClick(b)
+-- ⚠️ `keepTemplate` : un bouton bati sur un template d'ACTION (Secure/InsecureActionButton)
+-- porte SON handler OnClick, et c'est LUI qui lit les attributs type/spell pour lancer le
+-- sort. Un SetScript("OnClick") l'ECRASE -> le bouton s'affiche, se clique, et ne fait rien.
+-- Dans ce cas on HOOKE au lieu de remplacer.
+local function WireOnClick(b, keepTemplate)
     b:RegisterForClicks("LeftButtonUp")
-    b:SetScript("OnClick", function(self, mouseButton)
+    local function fire(self, mouseButton)
         if self._onClick then self._onClick(self, mouseButton) end
-    end)
+    end
+    if keepTemplate then
+        b:HookScript("OnClick", fire)
+    else
+        b:SetScript("OnClick", fire)
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -376,7 +385,11 @@ end
 function C.TextButton(parent, opts)
     opts = opts or {}
     local square = opts.square and true or false
-    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    -- `opts.template` = template SUPPLEMENTAIRE (ex. "SecureActionButtonTemplate" pour un
+    -- bouton qui doit lancer un sort : seul un bouton securise peut caster). BackdropTemplate
+    -- reste indispensable au skin maison, d'ou la concatenation.
+    local b = CreateFrame("Button", nil, parent,
+        opts.template and (opts.template .. ", BackdropTemplate") or "BackdropTemplate")
     b._padX = opts.padX or (square and 18 or 12)        -- marge horizontale texte<->bord
     b._padY = opts.padY or 0                            -- marge verticale (0 = pas de plancher impose)
     b._reqW = opts.width                                -- largeur demandee (plancher), nil sinon
@@ -439,7 +452,7 @@ function C.TextButton(parent, opts)
 
     Mixin(b, TextButtonMixin)
     b._onClick = opts.onClick
-    WireOnClick(b)
+    WireOnClick(b, opts.template ~= nil)
     -- Effet de survol sur la BORDURE (en plus du highlight de fond). Ignore quand
     -- selectionne (le liseré de selection prime). HookScript = ne clobber aucun
     -- OnEnter/OnLeave eventuel du call-site.
@@ -624,7 +637,7 @@ end
 -- Registre (cles faibles) des fenetres/modales de l'addon a RESCALER ensemble (option
 -- "Scale", onglet General). N'inclut PAS les elements runtime (timeline/upcoming/comm/
 -- announce), qui ont chacun leur propre echelle. C.Window s'y enregistre auto ; les modales
--- en CreateFrame brut (VariantBar/ShareFrame) appellent HR.RegisterScaledFrame elles-memes.
+-- en CreateFrame brut (VariantBar) appellent HR.RegisterScaledFrame elles-memes.
 HR._scaledFrames = HR._scaledFrames or setmetatable({}, { __mode = "k" })
 local function CurrentUIScale()
     return (HR.db and HR.db.options and HR.db.options.uiScale) or 1

@@ -608,8 +608,11 @@ local function BuildGeneralTab(panel)
 
     -- ===== En-tete : boutons (au-dessus des sections) =====
     setColumn(0)
-    button("Reset position",
+    local resetBtn = button("Reset position",
         function() if HR.Runtime.ResetPositions then HR.Runtime.ResetPositions() end end)
+    -- Curseur APRES le 1er bouton : le second se pose sur la MEME ligne, donc on restaure
+    -- cette valeur ensuite (sinon `button` consommerait deux hauteurs pour une seule rangee).
+    local rowY = y[1]
     local function testing() return HR.Runtime and HR.Runtime.state and HR.Runtime.state.mode == "test" end
     local testBtn
     testBtn = button("Start test", function()
@@ -617,6 +620,9 @@ local function BuildGeneralTab(panel)
         elseif HR.Runtime and HR.Runtime.StartTestMode then HR.Runtime.StartTestMode() end
         testBtn:SetText(testing() and "Stop test" or "Start test")
     end)
+    testBtn:ClearAllPoints()
+    testBtn:SetPoint("LEFT", resetBtn, "RIGHT", 8, 0)
+    y[1] = rowY
     if testing() then testBtn:SetText("Stop test") end
     local topEnd = y[1]
 
@@ -1160,9 +1166,15 @@ local function BuildOptionsPanel()
                 { toggle = "Show heal cooldowns (healer)",
                   get = function() return Opt().upcomingHeals == true end,
                   set = function(v) Opt().upcomingHeals = v end },      -- lu en direct par PlayerPlanCDs (rendu au tick)
+                { slider = "Maximum upcoming spells", min = 0, max = 12, step = 1,
+                  tooltip = "How many upcoming cooldowns the Personal Timeline shows at once. "
+                      .. "With 4, you only ever see the next 4; if only 3 are left, you see 3. "
+                      .. "Set it to 0 to switch the limit off and show the whole fight.",
+                  get = function() return Opt().upcomingMax or 0 end,
+                  set = function(v) Opt().upcomingMax = v end },        -- lu en direct par RenderUpcoming (rendu au tick)
                 { swatch = "Border color", key = "borderColor" },
                 { swatch = "Background color", key = "bgColor" },
-                { slider = "Scale", min = 0.5, max = 2.0, step = 0.05,
+                { slider = "Scale", min = 0.5, max = 4.0, step = 0.05,
                   get = function() return HR.CompGet("upcoming", "scale") end,
                   set = function(v) HR.CompOpt("upcoming").scale = v end },
             },
@@ -1237,7 +1249,7 @@ local function BuildOptionsPanel()
                   set = function(v) Opt().announceThreshold = v end,
                   tooltip = "Choose how long before the spell the icons pop up on screen.",
                   gatedBy = function() return Opt().announceDisabled == true end },
-                { slider = "Icon size", min = 16, max = 64, step = 2,
+                { slider = "Icon size", min = 16, max = 400, step = 2,
                   get = function() return Opt().announceIconSize or 32 end,
                   set = function(v) Opt().announceIconSize = v end,
                   tooltip = "Size of the announcement icons (the timer scales with them).",

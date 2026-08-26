@@ -54,6 +54,7 @@ HR.DB_DEFAULTS = {
         uiScale        = 1.0,                 -- echelle de la fenetre principale + modales (PAS le runtime)
         hideOOC        = true,                -- masque (alpha 0) hors combat / hors encounter
         variantSpecOnly = false,              -- popup de variantes : n'afficher que les variantes de la SPE heal active du joueur
+        showSyncedPlans = false,              -- popup de variantes : afficher UNIQUEMENT les plans recus par sync (bypasse variantSpecOnly)
         upcomingEnabled = true,               -- Upcoming bar affichee (independante de la Timeline)
         upcomingHideNext = false,             -- masquer le "what's next" (container 1 : prochain sort)
         upcomingHideName = false,             -- masquer le nom du sort de boss dans l'Upcoming bar
@@ -64,6 +65,7 @@ HR.DB_DEFAULTS = {
         upcomingBg     = { 0, 0, 0, 0.85 },   -- couleur de fond {r,g,b,a}
         upcomingVertical = false,             -- Personal Timeline en COLONNE (true) au lieu de RANGEE (false)
         upcomingHeals    = false,             -- afficher aussi les CD de HEAL du joueur (healer only)
+        upcomingMax      = 0,                 -- Personal Timeline : nb max de sorts A VENIR affiches (0 = tous)
         commLayout    = "horizontal",         -- LEGACY ("horizontal"|"vertical") : ne sert plus qu'a
                                               -- inferer commColumns (cf. HR.Runtime.CommColumns) ;
                                               -- commColumns N'EST PAS seede ici (sinon ecrase l'infer)

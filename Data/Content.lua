@@ -5,7 +5,7 @@
 --
 -- Schema :
 --   HR.content = liste ordonnee de donjons (8 onglets-icones en haut de la modale)
---   donjon  = { id, name, abbr, icon, iconSpellID, zoneID, bosses = {...}, trash = {...} }
+--   donjon  = { id, name, abbr, icon, iconSpellID, zoneID, teleport, bosses = {...}, trash = {...} }
 --   boss    = { id (encounterID), name, [enable], abilities = {...} }  OU  { ..., phases = {...} }
 --     enable = false => boss DESACTIVE : grise + inaccessible dans la config ; en
 --       combat la boite runtime passe en mode BRUT (aucun filtrage, affiche tout ce
@@ -84,6 +84,9 @@
 -- zoneID = instanceID de GetInstanceInfo : encore PLACEHOLDER (0) pour certains.
 -- ICONES : `icon` = fileID explicite (prioritaire) ; sinon `iconSpellID` = sort de
 -- teleportation M+ du donjon, resolu via C_Spell.GetSpellTexture.
+-- TELEPORT : `teleport` = spellID du teleport M+ (bouton de la homepage). Sur l'ancien
+-- pool il n'y a pas de champ dedie -- `iconSpellID` EST deja ce sort, d'ou le repli de
+-- HR.GetDungeonTeleport. Un donjon sans teleport connu = bouton grise, jamais d'erreur.
 local addonName, HR = ...
 
 HR.content = {
@@ -569,7 +572,7 @@ HR.content = {
 -- Le `mapID` (ChallengeMode) est note en commentaire : il ne sert PAS au runtime
 -- (pas le meme id que zoneID/encounterID), il ne documente que la provenance de l'icone.
 local content_1210 = {
-    { id = "ALTAR_OF_FANGS",       name = "Altar of Fangs",       abbr = "AOF", icon = 7956176, zoneID = 2993, -- mapID 588
+    { id = "ALTAR_OF_FANGS",       name = "Altar of Fangs",       abbr = "AOF", icon = 7956176, zoneID = 2993, teleport = 1286812, -- mapID 588
         trash = {
             { spellID = 1308865, name = "Infest" },
         },
@@ -671,7 +674,7 @@ local content_1210 = {
             },
         },
     },
-    { id = "RUBY_LIFE_POOLS",      name = "Ruby Life Pools",      abbr = "RLP", icon = 4746639, zoneID = 2521, -- mapID 399
+    { id = "RUBY_LIFE_POOLS",      name = "Ruby Life Pools",      abbr = "RLP", icon = 4746639, zoneID = 2521, teleport = 393256, -- mapID 399
         trash = {},
         bosses = {
             { id = 2609, name = "Melidrussa Chillworn", abilities = {
@@ -742,7 +745,7 @@ local content_1210 = {
             } },
         },
     },
-    { id = "TEMPLE_OF_SETHRALISS", name = "Temple of Sethraliss", abbr = "TOS", icon = 2178734, zoneID = 1877, -- mapID 250
+    { id = "TEMPLE_OF_SETHRALISS", name = "Temple of Sethraliss", abbr = "TOS", icon = 2178734, zoneID = 1877, teleport = 1286828, -- mapID 250
         trash = {},
         bosses = {
             { id = 2124, name = "Adderis and Aspix", abilities = {
@@ -806,7 +809,7 @@ local content_1210 = {
                 abilities = {} },
         },
     },
-    { id = "KINGS_REST",           name = "Kings' Rest",          abbr = "KR",  icon = 2178730, zoneID = 1762, -- mapID 249
+    { id = "KINGS_REST",           name = "Kings' Rest",          abbr = "KR",  icon = 2178730, zoneID = 1762, teleport = 1286831, -- mapID 249
         trash = {},
         bosses = {
             { id = 2139, name = "The Golden Serpent", phases = {
@@ -920,7 +923,7 @@ local content_1210 = {
             } },
         },
     },
-    { id = "THE_BLINDING_VALE",    name = "The Blinding Vale",    abbr = "TBV", icon = 7478534, zoneID = 2859, -- mapID 584
+    { id = "THE_BLINDING_VALE",    name = "The Blinding Vale",    abbr = "TBV", icon = 7478534, zoneID = 2859, teleport = 1286801, -- mapID 584
         trash = {},
         bosses = {
             { id = 3199, name = "Lightblossom Trinity", phases = {
@@ -1009,7 +1012,7 @@ local content_1210 = {
             },
         },
     },
-    { id = "VOIDSCAR_ARENA",       name = "Voidscar Arena",       abbr = "VA",  icon = 7479112, zoneID = 2923, -- mapID 585
+    { id = "VOIDSCAR_ARENA",       name = "Voidscar Arena",       abbr = "VA",  icon = 7479112, zoneID = 2923, teleport = 1286804, -- mapID 585
         trash = {},
         bosses = {
             { id = 3285, name = "Taz'rah", phases = {
@@ -1080,7 +1083,7 @@ local content_1210 = {
             },
         },
     },
-    { id = "DEN_OF_NALORAKK",      name = "Den of Nalorakk",      abbr = "DON", icon = 7478536, zoneID = 2825, -- mapID 586
+    { id = "DEN_OF_NALORAKK",      name = "Den of Nalorakk",      abbr = "DON", icon = 7478536, zoneID = 2825, teleport = 1286807, -- mapID 586
         trash = {},
         bosses = {
             { id = 3207, name = "The Hoardmonger", phases = {
@@ -1143,7 +1146,7 @@ local content_1210 = {
             },
         },
     },
-    { id = "MURDER_ROW",           name = "Murder Row",           abbr = "MR",  icon = 7467179, zoneID = 2813, -- mapID 587
+    { id = "MURDER_ROW",           name = "Murder Row",           abbr = "MR",  icon = 7467179, zoneID = 2813, teleport = 1286809, -- mapID 587
         trash = {},
         bosses = {
             { id = 3101, name = "Kystia Manaheart", enable = false, -- desactive -> grise en config, mode brut runtime
@@ -1322,6 +1325,28 @@ end
 function HR.GetCurrentDungeonIndex()
     local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
     return HR.GetDungeonIndexByInstance(instanceID)
+end
+
+-- SpellID du teleport M+ d'un donjon, ou nil. `teleport` explicite d'abord ; a defaut
+-- `iconSpellID`, qui EST le sort de teleportation sur l'ancien pool (cf. entete).
+function HR.GetDungeonTeleport(dungeon)
+    if not dungeon then return nil end
+    return dungeon.teleport or dungeon.iconSpellID
+end
+
+-- Le joueur connait-il ce teleport ? (recompense Keystone Master : absent tant qu'il n'a
+-- pas ete gagne). C_SpellBook.IsSpellInSpellBook D'ABORD : un teleport M+ vit dans le LIVRE
+-- DE SORTS mais n'est pas un "sort du joueur" au sens de IsPlayerSpell, qui peut donc
+-- repondre faux (c'est l'API que retient AlterEgo). Les deux anciennes restent en repli.
+function HR.KnowsDungeonTeleport(spellID)
+    if not spellID then return false end
+    if C_SpellBook and C_SpellBook.IsSpellInSpellBook then
+        local ok, known = pcall(C_SpellBook.IsSpellInSpellBook, spellID)
+        if ok and known then return true end
+    end
+    if IsPlayerSpell and IsPlayerSpell(spellID) then return true end
+    if IsSpellKnown and IsSpellKnown(spellID) then return true end
+    return false
 end
 
 -- Icone d'un donjon : `icon` (fileID explicite) sinon texture du sort de

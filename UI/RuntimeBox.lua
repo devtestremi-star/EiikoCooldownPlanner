@@ -281,13 +281,20 @@ local function RenderUpcoming()
         -- matches viennent de s.liveDefs et evoluent.
         local elapsed = GetTime() - (s.pullTime or GetTime())
         local list = PlayerPlanCDs(s)
-        if s.mode == "test" then
-            -- TEST uniquement : 4 sorts max (fenetre glissante des prochains A VENIR ; les
-            -- passes sont exclus -> ils disparaissent, comme le fait aussi LayoutPersoRow).
+
+        -- Plafond "Maximum upcoming spells" : fenetre glissante des N prochains sorts A VENIR
+        -- (les passes sont exclus ici comme dans LayoutPersoRow). 0 = option inactive, on
+        -- affiche tout. S'il y a moins de sorts que N, on en affiche moins -- sans remplissage.
+        local maxN = tonumber(Opt().upcomingMax) or 0
+        if maxN < 0 then maxN = 0 end
+        if s.mode == "test" and maxN == 0 then maxN = 4 end   -- test : plafond historique
+        if maxN > 0 then
             local up = {}
             for _, e in ipairs(list) do
-                if (e.time - elapsed) > 0 then up[#up + 1] = e end
-                if #up >= 4 then break end
+                if (e.time - elapsed) > 0 then
+                    up[#up + 1] = e
+                    if #up >= maxN then break end
+                end
             end
             list = up
         end

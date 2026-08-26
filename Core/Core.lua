@@ -30,9 +30,6 @@ function HR:OnInitialize()
     -- Macros /yell des CD externes (hors combat ; sinon via /hp macros).
     if HR.SetupMacros then HR.SetupMacros() end
 
-    -- Partage de plans : prefixe addon + ecoute des messages + hook de lien.
-    if HR.InitShare then HR.InitShare() end
-
     -- Masquage des timers des autres bossmods (BigWigs/LittleWigs, DBM, timeline
     -- Blizzard) quand ils font doublon avec les notres. No-op si l'option est OFF.
     if HR.ForeignBars and HR.ForeignBars.Init then HR.ForeignBars.Init() end

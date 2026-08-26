@@ -79,14 +79,16 @@ local function Build()
     end })
     f.btnChange:SetPoint("RIGHT", f.btnClose, "LEFT", -6, 0)
 
-    -- CTA C : Share (a gauche de "Change variant") -> diffuse la variante JOUEE au
-    -- groupe/raid (lien cliquable). Masque quand aucune variante (rien a partager).
-    f.btnShare = C.TextButton(c, { text = "Share", autoWidth = true, minWidth = 70, padX = 10, padY = 6, onClick = function()
+    -- CTA C : Sync (a gauche de "Change variant") -> pousse la variante JOUEE au groupe ;
+    -- chez les membres equipes elle est importee et posee active. Masque quand aucune
+    -- variante (rien a pousser). Ne fait qu'EMETTRE : le reste vit dans Core/Sync/.
+    f.btnSync = C.TextButton(c, { text = "Sync", autoWidth = true, minWidth = 70, padX = 10, padY = 6, onClick = function()
         local dID = f._dID
         local v = dID and HR.GetV2Used(dID)
-        if v and HR.Share then HR.Share.ShareVariant(dID, v) end
+        -- Un plan RECU n'est pas re-poussable (cf. la gate d'emission de Core/Sync/PlanSync).
+        if v and not v.synced then HR.EmitEvent(HR.EV.PLAN_SHARED, { dID = dID, variant = v }) end
     end })
-    f.btnShare:SetPoint("RIGHT", f.btnChange, "LEFT", -6, 0)
+    f.btnSync:SetPoint("RIGHT", f.btnChange, "LEFT", -6, 0)
 
     UI.prerun = f
     return f
@@ -108,7 +110,9 @@ function UI.ShowPrerunReminder(dID)
         f.noVar:Hide()
         f.icons:Show()
         UI.LayoutVariantIcons(f.icons, f.iconPool, 0, 0, v, ICON_SZ, 5)
-        f.btnShare:Show()
+        f.btnSync:Show()
+        local canSync = not v.synced
+        f.btnSync:SetEnabled(canSync); f.btnSync:SetAlpha(canSync and 1 or 0.4)
     else
         -- Aucune variante disponible pour ce donjon.
         f.varName:SetText(""); f.varName:Hide()
@@ -116,7 +120,7 @@ function UI.ShowPrerunReminder(dID)
         if f.icons._moreBtn then f.icons._moreBtn:Hide() end
         f.icons:Hide()
         f.noVar:Show()
-        f.btnShare:Hide()
+        f.btnSync:Hide()
     end
 
     f:Show(); f:Raise()

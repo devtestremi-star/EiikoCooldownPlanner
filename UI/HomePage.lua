@@ -23,6 +23,7 @@ local CHIP_H    = 24      -- PLANCHER de hauteur d'une chip (la hauteur reelle s
 local CHIP_GAP  = 4       -- ecart horizontal entre chips
 local CHIP_ROW  = 4       -- ecart vertical entre rangees de chips
 
+
 local LayoutChips         -- declaree ici : AcquireCard s'y refere avant sa definition
 
 -- Cle d'asset du fond d'un donjon, avec le MEME garde-fou que UI.UpdateContentBg : une cle
@@ -107,6 +108,36 @@ local function AcquireCard(i)
             UI.RefreshHomeButtons()
         end })
     c.btnList:SetPoint("BOTTOMRIGHT", -CARD_PAD, CARD_PAD)
+
+    -- Bouton TELEPORT M+, entre les deux autres : lancer un sort exige un bouton SECURISE
+    -- (type="spell") -- un OnClick normal ne peut pas caster. D'ou le template passe au
+    -- composant maison, pour garder l'aspect des autres CTA. Les attributs sont PROTEGES en
+    -- combat : on ne les ecrit qu'hors combat (un teleport ne se lance pas en combat de toute
+    -- facon), et on ne fait JAMAIS de Show/Hide dessus (protege aussi) -- le bouton existe
+    -- toujours, seul son aspect change. Configure par RefreshCardTeleport.
+    c.btnTP = C.TextButton(c, { text = "Teleport", template = "InsecureActionButtonTemplate",
+        autoWidth = true, minWidth = 0, padX = 12, padY = 7 })
+    c.btnTP:SetPoint("BOTTOM", c, "BOTTOM", 0, CARD_PAD)
+    -- Les DEUX bords : le handler securise n'agit que sur celui qui correspond au reglage
+    -- "lancer a l'appui de la touche" du joueur (cf. Core/Macros.lua / comm bar). Ecrase le
+    -- RegisterForClicks("LeftButtonUp") pose par le composant.
+    c.btnTP:RegisterForClicks("AnyUp", "AnyDown")
+    -- HookScript et pas SetScript : le composant accroche deja OnEnter/OnLeave pour l'effet
+    -- de survol de sa bordure.
+    c.btnTP:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if self._known and self._spellID then
+            GameTooltip:SetSpellByID(self._spellID)
+        elseif self._spellID then
+            GameTooltip:SetText("Dungeon teleport")
+            GameTooltip:AddLine("Not learned yet -- it is the Keystone Master reward for this dungeon.", 1, 0.82, 0, true)
+        else
+            GameTooltip:SetText("Dungeon teleport")
+            GameTooltip:AddLine("No teleport known for this dungeon.", 0.7, 0.7, 0.7, true)
+        end
+        GameTooltip:Show()
+    end)
+    c.btnTP:HookScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Zone des chips : entre le titre et les CTA. TOPLEFT + BOTTOMRIGHT uniquement (2 points
     -- opposes) -> aucun conflit de contrainte, et la zone suit la taille de la card.
@@ -218,11 +249,31 @@ local function listLabel(dungeon)
 end
 
 -- Rafraichit les seuls libelles (pas de relayout) : appele au clic et sur HR.LFG.OnChange.
+-- Etat du bouton de teleport d'une card. Grise (desature + alpha) quand le sort n'est pas
+-- appris ou inconnu de nos donnees : la card garde la meme forme pour tout le monde.
+-- ⚠️ En combat on ne TOUCHE PAS aux attributs (protege) : l'aspect se met a jour quand meme,
+-- et la configuration reelle est rejouee au prochain rendu hors combat.
+local function RefreshCardTeleport(c, dungeon)
+    local b = c.btnTP; if not b then return end
+    local spellID = HR.GetDungeonTeleport(dungeon)
+    local known   = spellID and HR.KnowsDungeonTeleport(spellID) or false
+    b._spellID, b._known = spellID, known
+    b:SetAlpha(known and 1 or 0.4)
+
+    -- spellID NUMERIQUE : c'est ce que passent BigWigs et AlterEgo sur ce meme template.
+    -- Attributs ecrits hors combat seulement (un teleport ne part pas en combat de toute facon).
+    if not InCombatLockdown() then
+        b:SetAttribute("type",  known and "spell" or nil)
+        b:SetAttribute("spell", known and spellID or nil)
+    end
+end
+
 function UI.RefreshHomeButtons()
     if not (UI.homePanel and UI.homePanel:IsShown()) then return end
     for i, c in ipairs(UI.homeCards) do
         local dungeon = c._dungeonIndex and HR.content[c._dungeonIndex]
         if dungeon and c.btnList:IsShown() then c.btnList:SetText(listLabel(dungeon)) end
+        if dungeon then RefreshCardTeleport(c, dungeon) end
     end
 end
 
@@ -319,6 +370,7 @@ function UI.RenderHome()
         c.art:SetShown(art ~= nil)
         c.title:SetText(dungeon.name or "?")
         c.btnList:SetText(listLabel(dungeon))
+        RefreshCardTeleport(c, dungeon)
         -- Porteurs de cle de CE donjon : jeu de test statique si actif, sinon le vrai groupe.
         c._holders = HR.Keys.TestActive() and HR.Keys.TestHolders(i)
             or HR.Keys.HoldersForMap(HR.LFG.ChallengeMapForDungeon(dungeon))

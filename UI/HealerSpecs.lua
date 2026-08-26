@@ -27,7 +27,7 @@ local TOOLTIP_BORDER = "Interface\\Tooltips\\UI-Tooltip-Border"
 local POPUP_W    = 300
 local POPUP_MAXH = 380
 local HEADER_H   = 26
-local FILTER_H   = 26            -- bandeau fixe (case "Show current class only") au-dessus du scroll
+local FILTER_H   = 50            -- bandeau fixe (2 cases : spe courante + plans synces) au-dessus du scroll
 local ICON_RECAP  = 30            -- taille des icones dans les lignes du popup selecteur
 local VARROW_H    = 60            -- ligne de variante sur 2 niveaux : nom + rangee d'icones
 local SECTION_GAP = 8
@@ -127,6 +127,23 @@ local function BuildVariantPopup()
         UI.RenderVariantPopup()          -- re-render la liste, le popup reste ouvert
     end)
     f.classFilter = cb
+
+    -- Case "Show sync plans" : les plans POUSSES par un tiers n'apparaissent pas dans la
+    -- liste normale (ils ne sont pas l'oeuvre du joueur). Cochee, elle n'affiche QU'EUX et
+    -- court-circuite "Show current spec only" -- un plan recu d'un autre heal n'a aucune
+    -- raison d'etre masque par le filtre de spe.
+    local sb = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    sb:SetSize(22, 22)
+    sb:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 0, -2)
+    sb.label = sb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    sb.label:SetPoint("LEFT", sb, "RIGHT", 2, 0)
+    sb.label:SetText("Show sync plans")
+    sb:SetScript("OnClick", function(self)
+        HR.db.options.showSyncedPlans = self:GetChecked() and true or false
+        UI.RenderVariantPopup()          -- re-render la liste, le popup reste ouvert
+    end)
+    f.syncFilter = sb
+
     f.scroll:SetPoint("TOPLEFT", 6, -(6 + FILTER_H))
 
     UI.varPopup = f
@@ -202,6 +219,9 @@ local function RenderVariantGroup(content, W, prof, grp, activeId, st)
         r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -st.y); r:SetWidth(W)
         -- Prefixe "DEFAULT" (rouge) devant le nom si c'est la variante auto-chargee de sa spe.
         local nm = HR.IsDefaultVariant(v.id) and (HR.Theme.Hex("ERROR_COLOR") .. "DEFAULT|r " .. v.name) or v.name
+        -- Prefixe "SYNC" (vert) pour un plan POUSSE par un tiers : ce n'est pas l'oeuvre du
+        -- joueur, et son contenu sera ecrase a la prochaine poussee de son auteur.
+        if v.synced then nm = HR.COLORS.GREEN .. "SYNC|r " .. nm end
         r.name:SetText(nm)
         UI.LayoutVariantIcons(r, r.iconPool, 10, -24, v, ICON_RECAP, 6)   -- ligne 2
         r.sel:SetShown(activeId == v.id)
@@ -239,16 +259,27 @@ function UI.RenderVariantPopup()
     -- popup se viderait ENTIEREMENT. On grise la case et on ignore l'option pour lui (sans
     -- jamais ECRIRE dans HR.db.options : elle reste valable pour ses persos heal).
     local isHealer = HR.IsHealerPlayer()
+    local syncOnly = HR.db.options.showSyncedPlans and true or false
+    if UI.varPopup.syncFilter then
+        UI.varPopup.syncFilter:SetChecked(syncOnly)
+    end
     if UI.varPopup.classFilter then
         UI.varPopup.classFilter:SetChecked(HR.db.options.variantSpecOnly and true or false)
-        UI.varPopup.classFilter:SetEnabled(isHealer)
-        local g = isHealer and 1 or 0.5
+        -- Grisee quand le filtre de sync prend la main (elle est alors sans effet), comme
+        -- pour un non-healer. On n'ECRIT jamais dans l'option : elle reste vraie ailleurs.
+        UI.varPopup.classFilter:SetEnabled(isHealer and not syncOnly)
+        local g = (isHealer and not syncOnly) and 1 or 0.5
         UI.varPopup.classFilter.label:SetTextColor(g, g, g)
     end
-    local specOnly = HR.db.options.variantSpecOnly and isHealer
+    local specOnly = (not syncOnly) and HR.db.options.variantSpecOnly and isHealer
     local myKey = HR.MyHealKey()
 
-    local list = HR.V2_GetVariants()
+    -- Les plans RECUS d'un tiers (`v.synced`) et les plans du joueur ne cohabitent jamais
+    -- dans la liste : la case bascule de l'un a l'autre.
+    local list = {}
+    for _, v in ipairs(HR.V2_GetVariants()) do
+        if (v.synced and true or false) == syncOnly then list[#list + 1] = v end
+    end
     local active = HR.GetActiveVariant()
     local activeId = active and active.id
     local byHealer = {}
@@ -845,14 +876,25 @@ function UI.BuildHealerSpecs(parent)
     end)
     p.varSetTemplate:Hide()
 
-    -- Share : diffuse la variante active au groupe/raid (lien cliquable).
-    p.varShare = UI.Components.TextButton(p, { text = "Share", autoWidth = true, minWidth = 0, padX = 15, padY = 9, onClick = function()
-        local cur = HR.GetActiveVariant()
-        if cur and UI.activeDungeonID and HR.Share then
-            HR.Share.ShareVariant(UI.activeDungeonID, cur)
-        end
+    -- Sync : pousse la variante active sur le canal de synchro (ECPSync). Chez les
+    -- destinataires elle est importee et posee ACTIVE sans aucun clic. Le bouton ne fait
+    -- qu'EMETTRE l'evenement ; tout le reste vit dans Core/Sync/ (cf. HR.EmitEvent).
+    p.varSync = UI.Components.TextButton(p, { text = "Sync", autoWidth = true, minWidth = 0, padX = 15, padY = 9, onClick = function()
+        HR.EmitEvent(HR.EV.PLAN_SHARED, { dID = UI.activeDungeonID, variant = HR.GetActiveVariant() })
     end })
-    p.varShare:Hide()
+    UI.Components.AttachHelpTip(p.varSync, "Sync", function()
+        local body = "Push this plan to your party. Members running the addon get it imported and set "
+            .. "as their active plan right away, with no click and no duplicate: pushing again "
+            .. "updates the very same plan on their side."
+        local cur = HR.GetActiveVariant()
+        if cur and cur.synced then
+            body = body .. "\n|cffff6060Unavailable:|r this plan was received from "
+                .. ((cur.syncFrom and cur.syncFrom.name) or "another player")
+                .. ". Duplicate it to make it yours."
+        end
+        return body
+    end)
+    p.varSync:Hide()
 
     -- Export / Import : modales a chaine (sous le container des variantes, completement a droite).
     p.varExport = UI.Components.TextButton(p, { text = "Export", autoWidth = true, minWidth = 0, padX = 15, padY = 9, onClick = function() UI.OpenExportModal() end })
@@ -904,11 +946,16 @@ local function RenderVariantControls(p, v)
     p.variantBox:SetPoint("LEFT", p.varNew, "LEFT", -PADX, 0)
     p.variantBox:Show()
 
-    -- SOUS le container, completement a droite : Import + Export + Share (sortis de la rangee de boutons).
-    p.varShare:ClearAllPoints();  p.varShare:SetPoint("TOPRIGHT", p, "BOTTOMRIGHT", -PADX, -4)
-    p.varExport:ClearAllPoints(); p.varExport:SetPoint("RIGHT", p.varShare, "LEFT", -6, 0)
+    -- SOUS le container, completement a droite : Import + Export + Sync (sortis de la rangee de boutons).
+    p.varSync:ClearAllPoints();   p.varSync:SetPoint("TOPRIGHT", p, "BOTTOMRIGHT", -PADX, -4)
+    p.varExport:ClearAllPoints(); p.varExport:SetPoint("RIGHT", p.varSync, "LEFT", -6, 0)
     p.varImport:ClearAllPoints(); p.varImport:SetPoint("RIGHT", p.varExport, "LEFT", -6, 0)
     p.varReset:ClearAllPoints();  p.varReset:SetPoint("RIGHT", p.varImport, "LEFT", -6, 0)
+
+    -- Sync : seulement SON PROPRE plan. Un plan recu d'un tiers n'est pas re-poussable
+    -- (il appartient a son auteur) -- le joueur doit le dupliquer pour se l'approprier.
+    local canSync = (v and not v.synced) and true or false
+    p.varSync:SetEnabled(canSync); p.varSync:SetAlpha(canSync and 1 or 0.4)
 
     -- Set template : actif seulement pour une variante healer-seul pas encore template.
     local canTpl = CanSetTemplate(v)
@@ -922,7 +969,7 @@ local function RenderVariantControls(p, v)
     p.varDefault:SetEnabled(defEn); p.varDefault:SetAlpha(defEn and 1 or 0.4)
 
     p.varTrigger:Show(); p.varNew:Show(); p.varDup:Show(); p.varEdit:Show()
-    p.varUse:Show(); p.varDefault:Show(); p.varSetTemplate:Show(); p.varShare:Show(); p.varExport:Show(); p.varImport:Show(); p.varReset:Show()
+    p.varUse:Show(); p.varDefault:Show(); p.varSetTemplate:Show(); p.varSync:Show(); p.varExport:Show(); p.varImport:Show(); p.varReset:Show()
     p.varNew:SetSelected(false)   -- au repos hors etat vide (voir RenderEmptyVariantControls)
 end
 
@@ -931,7 +978,7 @@ end
 -- variante active est masque.
 local function RenderEmptyVariantControls(p)
     p.varTrigger:Hide(); p.varDup:Hide(); p.varEdit:Hide(); p.varUse:Hide()
-    p.varDefault:Hide(); p.varSetTemplate:Hide(); p.varShare:Hide(); p.varExport:Hide(); p.varReset:Hide()
+    p.varDefault:Hide(); p.varSetTemplate:Hide(); p.varSync:Hide(); p.varExport:Hide(); p.varReset:Hide()
     p.variantBox:Hide()
 
     p.varNew:ClearAllPoints();    p.varNew:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PADX, -PADY); p.varNew:Show()

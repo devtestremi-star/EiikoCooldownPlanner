@@ -1,14 +1,13 @@
--- HealPlanner - Core/Share.lua
--- Partage d'un plan (variante active) dans le jeu : diffusion par message addon
--- au groupe/raid + lien cliquable affiche LOCALEMENT chez chaque destinataire.
---
--- Pourquoi un lien local et non un vrai message de chat : le serveur retire les
--- hyperliens custom (|H...|h) des messages de chat reels (filtre securite). On
--- transmet donc le plan par C_ChatInfo.SendAddonMessage (canal addon) et chaque
--- destinataire AFFICHE le lien dans sa propre fenetre. Clic -> apercu -> import.
+-- EiikoCooldownPlanner - Core/Share.lua
+-- CODEC de plan : serialisation, validation et import d'une variante. Aucun transport
+-- ici -- le partage par lien (diffusion PROTO 2 + hyperlien |Hhealplanner:|h + apercu)
+-- a ete RETIRE au profit du canal de synchro (bouton Sync, cf. Core/Sync/). Ce fichier
+-- ne garde que ce qui sert encore, a deux consommateurs :
+--   * Core/Sync/PlanSync.lua  -- encode la poussee, valide et importe la reception ;
+--   * UI/HealerSpecs.lua      -- modales Export / Import (chaine copiable).
 --
 -- Payload minimal : la data statique (defID, encounterID, occKey) est commune aux
--- deux joueurs (meme addon), on ne transmet que { dID, name, comp, assignments }.
+-- deux joueurs (meme addon), on ne transmet que { dID, name, healer, assignments... }.
 -- Encodage natif 12.0 (zero lib externe) : SerializeCBOR -> CompressString(Deflate)
 -- -> EncodeBase64. Tout est garde sous pcall (entrees reseau = non fiables).
 local addonName, HR = ...
@@ -16,15 +15,8 @@ local addonName, HR = ...
 HR.Share = HR.Share or {}
 local Share = HR.Share
 
-local PREFIX    = "HealPlanner"   -- prefixe de message addon (<= 16 car.)
-local LINK_TYPE = "healplanner"   -- prefixe d'hyperlien custom
-local PROTO     = 2               -- version du protocole de partage (2 = format variante V2)
-local CHUNK     = 220             -- taille utile par message (marge sous 255 avec l'entete)
-
--- Page CurseForge de l'addon (lien de telechargement diffuse avec un partage).
--- Envoye en texte BRUT : les addons de chat (Prat / ElvUI) le rendent cliquable cote
--- destinataire, et le serveur retirerait de toute facon un hyperlien custom.
-local ADDON_URL = "https://www.curseforge.com/wow/addons/eiikocooldownplanner"
+local PROTO = 2   -- version du format de PAYLOAD (2 = variante V2). Sans rapport avec le
+                  -- protocole de transport de la synchro (Core/Sync/Net.lua, PROTO 1).
 
 -- Enums d'encodage (12.0). Locales : si absents, on passe nil (valeurs par defaut)
 -- de facon coherente entre encodage et decodage.
@@ -110,7 +102,6 @@ function Share.BuildPayload(dungeonID, variant)
         kind   = "variant",
         dID    = dungeonID,
         name   = variant.name,
-        cls    = select(2, UnitClass("player")),  -- classe de l'emetteur (couleur du nom a la reception)
         healer = variant.healer,            -- profil de heal (jeton, ex. "MONK"/"PRIEST_HOLY")
         ext    = variant.externals,         -- { [defKey] = count } (externals de groupe)
         tsp    = variant.talentSpells,      -- { [spellID] = cle_de_variante_de_CD }
@@ -129,7 +120,7 @@ function Share.ValidatePayload(p)
     -- clef inconnue creerait chez le receveur une variante FANTOME, absente du selecteur
     -- (qui n'itere que HR.HEAL_PROFILES + NO_HEALER) donc ni selectionnable ni supprimable.
     if not HR.GetHealProfileOrNone(p.healer) then return false end
-    if p.cls ~= nil and type(p.cls) ~= "string" then return false end
+    if p.cls ~= nil and type(p.cls) ~= "string" then return false end   -- ancien champ : tolere a la lecture
     if p.ext ~= nil and type(p.ext) ~= "table" then return false end
     if p.tsp ~= nil and type(p.tsp) ~= "table" then return false end
     if p.asg ~= nil and type(p.asg) ~= "table" then return false end
@@ -188,33 +179,6 @@ function Share.SanitizeAssignments(dungeonID, asg)
     return out
 end
 
--- Compte les defensifs places (pour l'apercu).
-function Share.CountAssignments(asg)
-    local n = 0
-    if type(asg) == "table" then
-        for _, occs in pairs(asg) do
-            if type(occs) == "table" then
-                for _, defs in pairs(occs) do
-                    if type(defs) == "table" then n = n + #defs end
-                end
-            end
-        end
-    end
-    return n
-end
-
--- Compo positionnelle propre depuis un payload : tolere les cles numeriques OU
--- chaines ("1".."5", selon la representation CBOR) et ne garde que des jetons texte.
-function Share.NormalizeComp(comp)
-    local out = {}
-    if type(comp) ~= "table" then return out end
-    for i = 1, #HR.COMP_SLOTS do
-        local cls = comp[i] or comp[tostring(i)]
-        if type(cls) == "string" then out[i] = cls end
-    end
-    return out
-end
-
 -- Cree une variante V2 a partir d'un payload valide. `autodelete` => expire dans 24h (prune).
 -- Renvoie (variante, dID) ou nil si invalide.
 function Share.ImportPayload(payload, sender, autodelete)
@@ -240,143 +204,3 @@ function Share.ImportPayload(payload, sender, autodelete)
     return v, payload.dID
 end
 
---------------------------------------------------------------------------------
--- Emission (file d'envoi : 1 message par frame pour menager le limiteur)
---------------------------------------------------------------------------------
-
-local sendQueue = {}
-local sender = CreateFrame("Frame")
-sender:Hide()
-sender:SetScript("OnUpdate", function(self)
-    local m = table.remove(sendQueue, 1)
-    if not m then self:Hide() return end
-    if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-        C_ChatInfo.SendAddonMessage(PREFIX, m.text, m.channel, m.target)
-    end
-end)
-
--- Canal de diffusion + cible eventuelle. En solo + debug : whisper a soi-meme
--- (echo local) pour tester toute la chaine encode -> decoupe -> reassemblage.
-local function GroupChannel()
-    if IsInRaid() then return "RAID" end
-    if IsInGroup() then return "PARTY" end
-    if HR.debug then return "WHISPER", UnitName("player") end
-    return nil
-end
-
--- Partage la variante active au groupe/raid.
-function Share.ShareVariant(dungeonID, variant)
-    local channel, target = GroupChannel()
-    if not channel then
-        HR:Print("You must be in a party or raid to share a plan.")
-        return false
-    end
-    if not variant then return false end
-    local data = Encode(Share.BuildPayload(dungeonID, variant))
-    if not data then
-        HR:Print("Failed to encode the plan (C_EncodingUtil unavailable?).")
-        return false
-    end
-    -- Identifiant de partage unique cote emetteur : sel temporel + compteur.
-    Share.counter = (Share.counter or 0) + 1
-    local shareId = math.floor(GetTime()) .. "-" .. Share.counter
-    local total = math.ceil(#data / CHUNK)
-    for i = 1, total do
-        local chunk = data:sub((i - 1) * CHUNK + 1, i * CHUNK)
-        -- entete : proto \t shareId \t seq \t total \t chunk  (\t hors alphabet base64)
-        local text = ("%d\t%s\t%d\t%d\t%s"):format(PROTO, shareId, i, total, chunk)
-        sendQueue[#sendQueue + 1] = { text = text, channel = channel, target = target }
-    end
-    sender:Show()
-
-    -- Annonce publique dans le canal de GROUPE (texte simple, prefixe addon). Le lien
-    -- d'import cliquable, lui, reste LOCAL chez chaque destinataire (le serveur retire les
-    -- liens custom du chat reel) -> cf. AnnounceIncoming.
-    if channel == "PARTY" or channel == "RAID" then
-        SendChatMessage(
-            ("[EiikoCooldownPlanner - ECP] : %s shared a healing plan. Download ECP at %s")
-                :format(UnitName("player"), ADDON_URL),
-            channel)
-    end
-
-    return true
-end
-
---------------------------------------------------------------------------------
--- Reception (reassemblage des morceaux) + lien cliquable local
---------------------------------------------------------------------------------
-
-local inbox = {}          -- inbox[sender.."|"..shareId] = { parts, total, got }
-Share.received = {}       -- received[idx] = { payload, sender }  (apres reassemblage)
-
--- Affiche un VRAI message de chat (prefixe addon) qui MIME une ligne de chat :
---   ECP: <Nom-Royaume en couleur de classe>  [Import: <plan>]
--- Clic -> modale d'import (cf. OnSetItemRef). Le lien custom ne survit pas au chat reel
--- (filtre serveur) -> message LOCAL chez chaque destinataire.
-local function AnnounceIncoming(idx, payload, senderName)
-    local who   = tostring(senderName or "?"):gsub("|", "")          -- "Nom-Royaume" (pas de | : casserait le lien)
-    local name  = tostring(payload.name or "Plan"):gsub("|", "")
-    if #name > 40 then name = name:sub(1, 40) end
-    local who_c = ("|c%s%s|r"):format(HR.ClassColorHex(payload.cls), who)   -- nom en couleur de classe (blanc si inconnue)
-    local link  = ("|H%s:%d|h|cff33ff99[Import: %s]|r|h"):format(LINK_TYPE, idx, name)
-    DEFAULT_CHAT_FRAME:AddMessage(("%s%s  %s"):format(HR.CHAT_PREFIX, who_c, link))
-end
-
-local function OnAddonMsg(self, prefix, text, channel, senderName)
-    if prefix ~= PREFIX or type(text) ~= "string" then return end
-    -- Ignorer son propre partage (on recoit ses propres messages addon).
-    -- En mode debug, on se laisse recevoir soi-meme pour tester en solo.
-    if not HR.debug and senderName and senderName:match("^[^-]+") == UnitName("player") then return end
-
-    local proto, shareId, seq, total, chunk =
-        text:match("^(%d+)\t([^\t]+)\t(%d+)\t(%d+)\t(.*)$")
-    if not proto or tonumber(proto) ~= PROTO then return end
-    seq, total = tonumber(seq), tonumber(total)
-    if not seq or not total or total < 1 or total > 500 or seq < 1 or seq > total then return end
-
-    local key = (senderName or "?") .. "|" .. shareId
-    local rec = inbox[key]
-    if not rec then rec = { parts = {}, total = total, got = 0 }; inbox[key] = rec end
-    if rec.parts[seq] == nil then
-        rec.parts[seq] = chunk
-        rec.got = rec.got + 1
-    end
-    if rec.got < rec.total then return end
-
-    inbox[key] = nil
-    local payload = Decode(table.concat(rec.parts))
-    if not Share.ValidatePayload(payload) then return end
-
-    local idx = #Share.received + 1
-    Share.received[idx] = { payload = payload, sender = senderName }
-    AnnounceIncoming(idx, payload, senderName)
-end
-
--- Clic sur un lien custom : ouvre l'apercu d'import.
-local function OnSetItemRef(link)
-    if type(link) ~= "string" then return end
-    local idx = link:match("^" .. LINK_TYPE .. ":(%d+)$")
-    if not idx then return end
-    local rec = Share.received[tonumber(idx)]
-    if not rec then
-        HR:Print("This shared plan is no longer available (ask for a new share).")
-        return
-    end
-    if HR.UI and HR.UI.OpenImportPreview then
-        HR.UI.OpenImportPreview(rec.payload, rec.sender)
-    end
-end
-
---------------------------------------------------------------------------------
--- Init (appele depuis Core.lua / OnInitialize)
---------------------------------------------------------------------------------
-
-function HR.InitShare()
-    if Share.initialized then return end
-    Share.initialized = true
-    if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
-        C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
-    end
-    HR:RegisterEvent("CHAT_MSG_ADDON", OnAddonMsg)
-    hooksecurefunc("SetItemRef", OnSetItemRef)
-end

@@ -11,7 +11,7 @@ local function PrintHelp()
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp help" .. HR.COLORS.RESET .. "    - shows this help")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp toggle" .. HR.COLORS.RESET .. "  - enables/disables the addon")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp status" .. HR.COLORS.RESET .. "  - shows the current state")
-    HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp share" .. HR.COLORS.RESET .. "   - shares the active variant to party/raid")
+    HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp handshake" .. HR.COLORS.RESET .. " - asks the group who runs ECP, and in which version")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp macros" .. HR.COLORS.RESET .. "  - (re)creates the EHP_ macros (/yell for external CDs)")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp devlog" .. HR.COLORS.RESET .. "  - dev log for debugging (show/on/off/clear)")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp scan" .. HR.COLORS.RESET .. "    - capture zone + encounterID on each pull")
@@ -42,16 +42,10 @@ local dispatch = {
                 HR.CountPlans()))
     end,
 
-    -- Partage la variante AFFICHEE (V2), comme le bouton Share du panneau Healer specs.
-    -- ⚠️ Lisait avant `UI.activeVariant`, alimente uniquement par le V1 (healerDefaults)
-    -- -> la commande envoyait le plan de BASE V1 au lieu de la variante a l'ecran.
-    share = function()
-        local v = HR.GetActiveVariant and HR.GetActiveVariant()
-        if HR.Share and v and HR.UI.activeDungeonID then
-            HR.Share.ShareVariant(HR.UI.activeDungeonID, v)
-        else
-            HR:Print("Open the config (/ecp) and select a variant to share.")
-        end
+    -- Handshake du canal de synchro : qui, dans le groupe, fait tourner l'addon.
+    -- Le code metier ne fait QUE publier l'evenement ; Core/Sync/Listeners.lua prend le relais.
+    handshake = function()
+        HR.EmitEvent(HR.EV.HANDSHAKE_REQUEST, { reason = "slash" })
     end,
 
     whatsnew = function()

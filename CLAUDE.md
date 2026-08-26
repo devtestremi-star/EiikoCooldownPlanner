@@ -32,7 +32,10 @@ Core/
   Events.lua             # frame d'événements unique + dispatch (multi-handlers)
   Capture.lua            # /hp scan : capture encounterID/zoneID (ENCOUNTER_START)
   Macros.lua             # macros EHP_ /yell des CD externes (init: purge EHP_* + recrée)
-  Share.lua              # partage d'un plan (comm addon + lien cliquable local + import)
+  Share.lua              # CODEC de plan (serialisation CBOR->Deflate->Base64, validation,
+                         #   assainissement, import). AUCUN transport : le partage par lien a ete
+                         #   RETIRE au profit du canal de synchro. Consommateurs : Core/Sync/
+                         #   PlanSync.lua et les modales Export/Import de UI/HealerSpecs.lua.
   ForeignBars.lua        # option `hideOtherBossMods` : masque les timers des AUTRES bossmods
                          #   qui font doublon. BigWigs/LittleWigs = message `BigWigs_BarCreated`
                          #   (loader, RegisterMessage avec un POINT) + `bar:Stop()` sur key
@@ -42,6 +45,35 @@ Core/
                          #   Blizzard = reparent de `EncounterTimeline` (hors combat, seul
                          #   etat stateful -> `FB.Apply`). Pull/break/respawn/stages/custom
                          #   intacts. JAMAIS d'ecriture dans la DB/CVar d'un autre addon.
+  Sync/                  # canal de SYNCHRO des plans (prefixe addon `ECPSync`), separe du
+                         #   codec de Share.lua. Ordre de chargement impose.
+    Bus.lua              #   bus d'evenements INTERNE : `HR.EV` (noms) + `HR.EmitEvent(nom,
+                         #   payload)` / `HR.OnEvent(nom, fn)`. pcall par handler (entree reseau).
+    Net.lua              #   transport : trame `proto \t kind \t msgId \t seq \t total \t body`,
+                         #   file d'envoi 1 msg/frame, reassemblage. En solo -> echo local (message
+                         #   addon adresse a soi-meme), sans garde `HR.debug`. Canal : categorie
+                         #   `LE_PARTY_CATEGORY_HOME` UNIQUEMENT (RAID/PARTY) -- un groupe de FILE
+                         #   (donjon aleatoire/LFR) est hors perimetre : on ne pousse pas un plan
+                         #   auto-importe a des inconnus. La categorie est passee EXPLICITEMENT :
+                         #   `IsInGroup()` nu repond oui pour un groupe de file, et le serveur
+                         #   jetterait alors le message PARTY sans erreur.
+                         #   `msgId` = `<royaume+5 hex du GUID>:<compteur DB>` :
+                         #   racine STABLE entre sessions (GetTime repartait a zero) + compteur qui
+                         #   separe deux poussees successives (sinon l'accuse de l'une valide
+                         #   l'autre). Le GUID entier n'est PAS transporte : l'entete voyage sur
+                         #   CHAQUE morceau et un message addon est plafonne a 255 o -> la taille
+                         #   utile est CALCULEE depuis l'entete reel (CHUNK 220 = plafond).
+    PlanSync.lua         #   message `PLAN` : le bouton Sync pousse la variante affichee ; chez le
+                         #   destinataire elle est importee SANS clic et posee ACTIVE. Cible d'ecriture
+                         #   bornee par l'index `db2.syncImports[dID]["<emetteur>:<id distant>"]` ->
+                         #   variante locale (les id sont des compteurs LOCAUX : ecrire a l'id brut
+                         #   detruirait un plan personnel). Autodelete 24h comme l'import manuel.
+    Handshake.lua        #   HELLO / HELLO_ACK : qui a l'addon, en quelle version. Reponse sur le
+                         #   canal ADDON adressee a l'emetteur (invisible dans le chat). Affichage
+                         #   IMMEDIAT de chaque reponse, fermeture a T+5s qui liste les `no addon`
+                         #   (reponse hors passe = `(late)`). Etat VOLATILE (`HR.Sync.roster`).
+    Listeners.lua        #   SEUL site d'enregistrement de listeners du canal (RegisterEvent +
+                         #   OnEvent). Ignore ses propres messages sauf echo solo / debug.
   Commands.lua           # slash /ecp (alias /hp)
 Data/
   Defensives.lua         # défensifs (spellID -> cooldown, class, role)
@@ -60,7 +92,11 @@ UI/
                          #   de son). Reset au changement de boss/donjon/vue/trash.
   VariantBar.lua         # barre de variantes (menu, compo, actions) + modale création
   SettingsFrame.lua      # fenêtre Options (bouton à droite des onglets) — vide pour l'instant
-  ShareFrame.lua         # aperçu d'un plan reçu + bouton Importer
+  SyncFrame.lua          # modale de PROGRESSION d'une poussee (bouton Sync) : 1 ligne par membre
+                         #   du groupe + spinner (8 points, zero texture) jusqu'au verdict —
+                         #   `Sync success` (SYNC_OVER recu) / `Sync failed` (SYNC_START mais pas
+                         #   SYNC_OVER) / `Addon missing` (muet). Timeout 5 s. N'affiche que :
+                         #   l'etat lui est pousse par Core/Sync/PlanSync.lua.
   RuntimeBox.lua         # affichage combat : Upcoming bar + Communication bar + reconnaissance
                          #   des events serveur (ENCOUNTER_TIMELINE) par durée (partagée TimelineBox)
   TimelineBox.lua        # Timeline défilante (vue alternative, option timelineMode) : colonne
@@ -170,28 +206,93 @@ commune. On n'expose dans `_G` que ce que le client exige (SavedVariables,
 Tout est en tables Lua pures → prêt pour un export/import (string) ultérieur.
 La clé d'occurrence est `spellID:index` (stable aux édits voisins).
 
-### Partage de plans (`Core/Share.lua` + `UI/ShareFrame.lua`)
+### Codec de plan (`Core/Share.lua`)
 
-- **Quoi** : la **variante active** (bouton « Partager » de la barre, ou `/hp share`).
-- **Payload minimal** : `{ v=PROTO, kind="variant", dID, name, comp, asg=assignments }`.
+- **Payload** : `{ v=PROTO(2), kind="variant", dID, name, healer, ext, tsp, asg, tlv }`.
   La data statique (defID, encounterID, occKey) est commune aux deux joueurs (même
-  addon) → on ne transmet que name + comp + assignments.
+  addon) → on ne transmet que le nom, le profil de heal et les placements.
 - **Encodage natif 12.0, zéro lib** : `C_EncodingUtil.SerializeCBOR` →
   `CompressString(Deflate)` → `EncodeBase64`. Tout sous `pcall` (entrée réseau =
   non fiable). Decode = inverse ; payload re-validé (`ValidatePayload`) et
   assignments filtrés (`SanitizeAssignments` : encounterID du donjon, occKey en
   string, defID connu de `HR.defensives`).
-- **Transport** : `C_ChatInfo.SendAddonMessage` (prefixe `HealPlanner`) au canal
-  PARTY/RAID, **découpé en morceaux ≤220** (entête `proto\tshareId\tseq\ttotal\t`),
-  file d'envoi 1 msg/frame. Réassemblage côté réception par (sender, shareId, seq).
-- ⚠️ **Le serveur retire les hyperliens custom `|H...|h` des messages de chat
-  réels** (filtre sécurité) → impossible de faire porter le lien par un vrai
-  message. Donc : on diffuse la data par comm addon et **chaque destinataire
-  affiche le lien LOCALEMENT** (`HR:Print` d'un `|Hhealplanner:<idx>|h`). Clic →
-  `hooksecurefunc("SetItemRef")` → `UI.OpenImportPreview` → bouton Importer crée une
-  **nouvelle** variante (rien n'est écrasé). On ignore son propre partage (on reçoit
-  ses propres messages addon). Marche uniquement entre joueurs ayant l'addon et dans
-  le même groupe/raid au moment du partage (choix : pas de chaîne copier/coller).
+- **Aucun transport ici.** Le partage par lien (`|Hhealplanner:|h`, `hooksecurefunc
+  ("SetItemRef")`, aperçu `UI/ShareFrame.lua`, `/ecp share`, diffusion sur le préfixe
+  `HealPlanner`) a été **entièrement retiré** : le canal de synchro (bouton **Sync**,
+  `Core/Sync/`) le remplace. Ne pas le réintroduire — un plan se pousse, il ne se
+  publie plus.
+- Consommateurs : `Core/Sync/PlanSync.lua` (poussée + réception) et les modales
+  **Export / Import** de `UI/HealerSpecs.lua` (chaîne copiable). Le format texte
+  `ecp;2` est un autre chemin, dans `Core/ShareText.lua` + `UI/ImportText.lua`.
+
+### Synchro des plans (`Core/Sync/*`) — REGLE D'ARCHITECTURE
+
+Tout ce qui est ajoute sous `Core/Sync/` suit deux regles, sans exception :
+
+1. **Aucun listener dans le code metier.** Les listeners sont des fonctions du fichier
+   `Core/Sync/Listeners.lua`, seul site de `HR:RegisterEvent` / `HR.OnEvent` pour ce canal.
+   Elles **appellent** le code existant ; le code existant ne doit **jamais** appeler dedans.
+2. **`HR.EmitEvent(HR.EV.X, payload)` est autorise partout** dans l'addon — c'est le seul
+   point de contact avec le canal. Ex. `Core/Commands.lua` (`/ecp handshake`) ne fait que
+   `HR.EmitEvent(HR.EV.HANDSHAKE_REQUEST, { reason = "slash" })`.
+
+Sens des dependances : `Listeners → Handshake → Net → Bus → code existant`. Les fichiers
+s'**auto-amorcent au chargement** (pas d'appel depuis `Core/Core.lua`, qui reste ignorant du
+canal). ⚠️ `PLAYER_LOGIN` est inutilisable comme amorcage : `Core/Events.lua` le consomme pour
+`OnInitialize` et sort avant le dispatch.
+
+Messages livres :
+
+- `HELLO` / `HELLO_ACK` (`/ecp handshake`) — qui a l'addon, en quelle version. Reponse adressee
+  sur le canal ADDON (pas un chuchotement visible), **zero ecriture en DB**.
+- `PLAN` (bouton **Sync** du panneau Healer specs, `UI/HealerSpecs.lua` — PAS `VariantBar.lua`,
+  dont l'UI est construite puis MASQUEE) — pousse la variante
+  affichee ; le destinataire l'importe **sans rien demander** et la pose **active** (★). Encodage
+  reutilise TEL QUEL (`HR.Share.EncodeVariant`) ; l'id distant voyage dans le corps de la trame,
+  pas dans le CBOR, pour ne rien changer au canal de partage deja deploye. ⚠️ **Premier code qui
+  ecrit dans la DB d'un autre joueur depuis le reseau** : l'ecriture ne peut viser QUE une variante
+  creee par ce mecanisme et indexee dans `db2.syncImports` (cle additive, creee a la volee) ; une
+  variante que le joueur a ecrite lui-meme n'y figure jamais. Payload valide (`ValidatePayload`) et
+  assaini (`SanitizeAssignments` / `SanitizeExternals`) avant la DB. **Pas encore d'autorisation** :
+  n'importe qui dans le groupe peut pousser — c'est l'objet du lot suivant.
+  **Deux gates** : (1) a l'EMISSION, on ne pousse que SON PROPRE plan — un plan recu
+  (`v.synced`) a son bouton Sync grise, il faut le **dupliquer** pour se l'approprier
+  (`HR.V2_DuplicateVariant` ne recopie JAMAIS `synced`/`syncFrom` : c'est l'echappatoire) ;
+  (2) a la RECEPTION, un plan dont la cle `(emetteur, id distant)` n'est PAS dans
+  `db2.syncImports` ouvre une fenetre d'accord — une modale MAISON (`UI.Components.Window`
+  + fond `bg-variant`, `UI/SyncFrame.lua`), pas une StaticPopup : la decision engage la DB du
+  joueur. Une demande a l'ecran a la fois, les suivantes font la file ; fermer vaut refus.
+  Rien n'est ecrit tant que le joueur n'a pas repondu. L'entree d'index EST l'autorisation :
+  une fois acceptee, les poussees suivantes de CE plan par CE joueur s'appliquent sans rien
+  demander. La modale porte **deux cases** (infobulle au survol, DECOCHEES par defaut) :
+  *Delete this variant in 24h* (TTL optionnel — meme mecanisme que l'import manuel,
+  `db2.imports[dID][id]` + `HR.PruneExpiredVariants` ; une variante acceptee SANS TTL n'en
+  recoit jamais un aux poussees suivantes) et *Trust this author* (whitelist
+  `db2.syncTrust[<auteur qualifie>]`, cle additive — plus aucune demande pour CE joueur,
+  meme pour un plan jamais vu).
+  ⚠️ L'etat renvoye a l'emetteur est un **champ de la reponse**, pas un evenement
+  de plus : `SYNC_START` porte `""` (recu) ou `"PENDING"` (j'attends mon joueur -> la ligne
+  affiche « Pending approval… » et echappe au verdict des 5 s), `SYNC_OVER` porte `"OK"`
+  (applique) ou `"DENIED"` (« Declined », pas « Sync failed »).
+  Une variante recue porte deux champs **additifs** : `synced = true` et
+  `syncFrom = { name = "<auteur qualifie>", at = <timestamp serveur> }` (trace de l'auteur).
+  Consequence UI : elle **n'apparait PAS** dans la liste normale du selecteur — il faut cocher
+  **« Show sync plans »**, qui n'affiche QU'ELLES et court-circuite « Show current spec only »
+  (option `showSyncedPlans`, `UI/HealerSpecs.lua`). Chaque ligne porte un prefixe vert `SYNC`.
+- `SYNC_START` / `SYNC_OVER` — accuses renvoyes par le DESTINATAIRE a l'emetteur seul, avec le
+  `msgId` de la poussee. `SYNC_START` part **avant tout decodage** (« j'ai recu »), `SYNC_OVER`
+  **seulement** au bout du chemin d'import : c'est ce qui permet a la modale de distinguer un
+  client sans addon (muet) d'un import casse en route. Cote metier on ne fait qu'emettre les
+  evenements de bus du meme nom ; `Listeners.lua` les met sur le fil.
+
+📄 **Documentation de reference** : `Interface/docs/EiikoCooldownPlanner/plan-sync.md` decrit
+le systeme LIVRE (transport, messages, gates, cles de DB, UI, checklist de test, et ce qui
+n'est PAS fait). Il **fait foi**. `plan-sync-vivante.md` reste le plan d'INTENTION d'origine.
+
+Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (le garde-fou
+« autorisation revocable » n'est donc pas tenu), verrou de lecture seule sur une variante recue,
+`HAS?` (savoir qui est en retard avant de pousser), garde de combat. Ils s'ajouteront comme un
+`kind` de plus dans `OnNetMessage`.
 
 ## Logique clé
 
@@ -377,7 +478,9 @@ La clé d'occurrence est `spellID:index` (stable aux édits voisins).
     attaché par **index** de `panels[]` — un réordonnancement d'onglet impose de re-mapper les index) :
     **1 General** (`BuildGeneralTab` : boutons Reset position + Start/Stop test en en-tête, puis
     colonnes **Alert** | **Glow**), **2 Announcements** (`panels[2]`, compo `announce`),
-    **3 Personal Timeline** (`panels[3]`, compo `upcoming` ; Enable = `upcomingEnabled`),
+    **3 Personal Timeline** (`panels[3]`, compo `upcoming` ; Enable = `upcomingEnabled` ;
+    `upcomingMax` = nb max de sorts A VENIR affiches, **0 = tous** — lu au tick par
+    `RenderUpcoming`, plafond historique de 4 conserve en mode test quand l'option vaut 0),
     **4 Communication Bar** (`panels[4]`, compo `comm` ; **Disable Communication Bar** = `commDisabled`,
     Columns, reverse, filtre, non-healer), **5 Bars and Timeline** (`panels[5]`, 2 colonnes timeline
     d'icônes | progress bars), **6 Profiles** (`panels[6]`). Chaque onglet peut porter un **bloc d'info**
