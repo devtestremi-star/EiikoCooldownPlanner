@@ -42,6 +42,10 @@ function HR:OnInitialize()
     -- peuvent recevoir leurs attributs qu'a ce moment (cf. UI/RuntimeBox.lua).
     if HR.Runtime and HR.Runtime.PreBuild then HR.Runtime.PreBuild() end
 
+    -- Rattache les cadres HUD a l'unlock mode d'EllesmereUI (`/unlock`). APRES PreBuild, et
+    -- no-op complet si la suite n'est pas installee. Cf. Core/EditMode.lua.
+    if HR.EditMode and HR.EditMode.Init then HR.EditMode.Init() end
+
     -- Entree dans Options > AddOns (menu WoW).
     if HR.RegisterBlizzOptions then HR.RegisterBlizzOptions() end
 

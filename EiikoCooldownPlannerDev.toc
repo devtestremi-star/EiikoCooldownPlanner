@@ -8,6 +8,9 @@
 ## SavedVariablesPerCharacter: HealPlannerCharDB
 ## AddonCompartmentFunc: HealPlanner_OnAddonCompartmentClick
 ## AllowAddOnTableAccess: 1
+# EllesmereUI : optionnel, mais s'il est la il doit charger AVANT nous -- sinon la globale
+# EllesmereUI n'existe pas encore quand Core/EditMode.lua s'enregistre (cf. SKINNING_API.md).
+## OptionalDeps: EllesmereUI
 ## Category: Mythic+
 ## X-Curse-Project-ID:
 ## X-Wago-ID:
@@ -72,6 +75,11 @@ Core\Sync\PlanSync.lua
 Core\Sync\Listeners.lua
 
 Core\ForeignBars.lua
+
+# Rattachement de nos cadres HUD a l'unlock mode d'EllesmereUI (no-op sans EllesmereUI).
+# A cote de ForeignBars : meme nature (integration d'un addon tiers), memes regles. Tout ce
+# qu'il touche (HR.UI.*, HR.Runtime.*) est resolu PARESSEUSEMENT -> pas de contrainte d'ordre.
+Core\EditMode.lua
 
 UI\RuntimeBox.lua
 Core\BossModAttach.lua

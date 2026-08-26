@@ -45,6 +45,23 @@ Core/
                          #   Blizzard = reparent de `EncounterTimeline` (hors combat, seul
                          #   etat stateful -> `FB.Apply`). Pull/break/respawn/stages/custom
                          #   intacts. JAMAIS d'ecriture dans la DB/CVar d'un autre addon.
+  EditMode.lua           # rattache 4 cadres HUD (`runtime`/`timeline`/`progress`/`announce`) a
+                         #   l'UNLOCK MODE d'EllesmereUI (`/unlock`) via
+                         #   `EllesmereUI:RegisterUnlockElements` + `MakeUnlockElement`. Memes
+                         #   regles que ForeignBars (duck-typing sur `_G`, pcall, no-op si absent,
+                         #   JAMAIS d'ecriture dans `EllesmereUIDB`). EUI bouge le cadre, NOUS
+                         #   sauvegardons : les positions restent dans `HR.db.ui[key]`, donc par
+                         #   profil. ⚠️ `savePos` IGNORE les coordonnees d'EUI (il raisonne en
+                         #   CENTER/CENTER + unites UIParent, nous en TOPLEFT + echelle du cadre)
+                         #   et rappelle `HR.SaveFramePosTopLeft` -- le rect est a jour, le cadre
+                         #   vient d'etre deplace. `loadPos` renvoie nil et `noInitHook = true` :
+                         #   EUI ne re-applique jamais (sinon `applyPos` partirait au login pour
+                         #   CHAQUE element, meme `isHidden`) -- `HR.ApplyActiveProfile` reste
+                         #   seul maitre. La **comm bar est EXCLUE** (boutons securises : le garde
+                         #   `IsProtected()` d'EUI ne voit pas un conteneur qui se contente d'en
+                         #   contenir). Session d'unlock -> mode test (sinon rien n'est visible
+                         #   hors combat), jamais sur un encounter LIVE.
+                         #   📄 `Interface/docs/EiikoCooldownPlanner/editmode-integration.md`.
   Sync/                  # canal de SYNCHRO des plans (prefixe addon `ECPSync`), separe du
                          #   codec de Share.lua. Ordre de chargement impose.
     Bus.lua              #   bus d'evenements INTERNE : `HR.EV` (noms) + `HR.EmitEvent(nom,
