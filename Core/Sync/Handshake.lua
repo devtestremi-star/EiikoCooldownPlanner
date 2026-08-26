@@ -46,7 +46,11 @@ end
 -- demande (slash, futur bouton) -- purement informatif, journalise en debug.
 function Handshake.Broadcast(reason)
     local channel, target = Net.GroupChannel()
-    local selfEcho = (channel == "WHISPER")
+    if not channel then
+        HR:Print("You are not in a party or raid -- nobody to handshake with.")
+        return
+    end
+    local selfEcho = (channel == "WHISPER")   -- echo local (mode debug) : on se repond a soi-meme
 
     wipe(HR.Sync.roster)
     local msgId = Net.NewMsgId()

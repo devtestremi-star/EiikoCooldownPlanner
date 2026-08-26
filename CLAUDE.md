@@ -50,8 +50,12 @@ Core/
     Bus.lua              #   bus d'evenements INTERNE : `HR.EV` (noms) + `HR.EmitEvent(nom,
                          #   payload)` / `HR.OnEvent(nom, fn)`. pcall par handler (entree reseau).
     Net.lua              #   transport : trame `proto \t kind \t msgId \t seq \t total \t body`,
-                         #   file d'envoi 1 msg/frame, reassemblage. En solo -> echo local (message
-                         #   addon adresse a soi-meme), sans garde `HR.debug`. Canal : categorie
+                         #   file d'envoi 1 msg/frame, reassemblage. En SOLO, `Net.GroupChannel`
+                         #   renvoie **nil** (l'appelant refuse : rien a pousser) -- l'echo local
+                         #   (message addon adresse a soi-meme, qui exerce toute la chaine sans
+                         #   second client) ne subsiste que sous `HR.debug`, sinon on se creait un
+                         #   doublon `SYNC` de son propre plan. `Net.HasAudience()` = etat du bouton
+                         #   Sync cote UI. Canal : categorie
                          #   `LE_PARTY_CATEGORY_HOME` UNIQUEMENT (RAID/PARTY) -- un groupe de FILE
                          #   (donjon aleatoire/LFR) est hors perimetre : on ne pousse pas un plan
                          #   auto-importe a des inconnus. La categorie est passee EXPLICITEMENT :
@@ -74,6 +78,23 @@ Core/
                          #   (reponse hors passe = `(late)`). Etat VOLATILE (`HR.Sync.roster`).
     Listeners.lua        #   SEUL site d'enregistrement de listeners du canal (RegisterEvent +
                          #   OnEvent). Ignore ses propres messages sauf echo solo / debug.
+  Keybind.lua            # raccourci clavier d'ouverture (action `ECPLANNER_OPEN`, defaut **ALT-P**).
+                         #   Declare dans `Bindings.xml` (RACINE de l'addon, charge tout seul par
+                         #   le client : **jamais** dans le .toc). Globales exigees par le client :
+                         #   `BINDING_NAME_ECPLANNER_OPEN` (libelle de la ligne) et
+                         #   `EiikoCooldownPlanner_OnKeybind` (le corps d'un <Binding> ne voit que
+                         #   `_G` -- meme statut que `HealPlanner_OnAddonCompartmentClick`).
+                         #   ⚠️ Le GROUPE du menu Touches = attribut `category` du XML, resolu en
+                         #   `_G[category]` avec repli sur la chaine brute -> on y met le nom de
+                         #   l'addon EN CLAIR. `category="ADDONS"` resout la globale Blizzard du
+                         #   meme nom et l'entree devient introuvable (verifie en jeu).
+                         #   Action : fenetre fermee -> `UI.Toggle()` (= `/ecp`) ; ouverte hors
+                         #   accueil -> `UI.ShowHomePage()` ; deja a l'accueil -> RIEN (fermer
+                         #   reste Echap / la croix). Defaut pose UNE fois (`db.keybindSeeded`,
+                         #   cle additive a la RACINE de la DB, hors profil) et SEULEMENT si ALT-P
+                         #   est libre : une touche prise n'est JAMAIS volee. API `KB.CurrentLabel/
+                         #   Set/Clear` (l'UI ne touche a aucune API de binding) ; `UPDATE_BINDINGS`
+                         #   resynchronise la rangee des options. Charge APRES `Core/Events.lua`.
   Commands.lua           # slash /ecp (alias /hp)
 Data/
   Defensives.lua         # défensifs (spellID -> cooldown, class, role)
@@ -107,7 +128,9 @@ UI/
 
 Chaque fichier reçoit `local addonName, HR = ...`. `HR` est la table privée
 commune. On n'expose dans `_G` que ce que le client exige (SavedVariables,
-`SlashCmdList`, `HealPlanner_OnAddonCompartmentClick`).
+`SlashCmdList`, `HealPlanner_OnAddonCompartmentClick`, et les deux globales du raccourci
+clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — cf.
+`Core/Keybind.lua`).
 
 ## Modèle de données
 
@@ -477,7 +500,10 @@ Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (
     `BuildOptionsPanel`/`OptionBinders`) en **ONGLETS** (⚠ `TAB_NAMES` fixe l'ORDRE, le contenu est
     attaché par **index** de `panels[]` — un réordonnancement d'onglet impose de re-mapper les index) :
     **1 General** (`BuildGeneralTab` : boutons Reset position + Start/Stop test en en-tête, puis
-    colonnes **Alert** | **Glow**), **2 Announcements** (`panels[2]`, compo `announce`),
+    colonnes **Alert** (`colX 0`) | **Glow** (`COL2_X 360`) | **Keybinding** (`COL3_X 720` :
+    `keybindRow`, seul widget de CAPTURE de touche du codebase — clavier confisqué uniquement
+    pendant la capture, Échap annule, bouton *Clear*, cf. `Core/Keybind.lua`)),
+    **2 Announcements** (`panels[2]`, compo `announce`),
     **3 Personal Timeline** (`panels[3]`, compo `upcoming` ; Enable = `upcomingEnabled` ;
     `upcomingMax` = nb max de sorts A VENIR affiches, **0 = tous** — lu au tick par
     `RenderUpcoming`, plafond historique de 4 conserve en mode test quand l'option vaut 0),

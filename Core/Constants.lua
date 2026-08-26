@@ -35,6 +35,11 @@ HR.DB_DEFAULTS = {
     -- "What's new" : derniere VERSION pour laquelle la modale a ete masquee (case cochee).
     -- account-wide (racine, hors profil). Differente de HR.VERSION => modale re-affichee a l'init.
     whatsNewVersion = "",
+    -- Raccourci d'ouverture : la pose du defaut (ALT-P) n'est TENTEE qu'une fois. Racine,
+    -- hors profil (db.options est re-pointe par profil : changer de profil ne doit pas
+    -- re-proposer la touche) et account-wide -> un joueur qui efface volontairement le
+    -- raccourci ne le voit jamais revenir, y compris sur un autre personnage.
+    keybindSeeded = false,
     -- Variantes de plan par donjon. dungeons[dungeonID] = { usedVariant, variants }.
     dungeons = {},
     nextVariantId = 1,  -- compteur d'ID de variante (unique, stable)

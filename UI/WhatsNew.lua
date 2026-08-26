@@ -15,20 +15,15 @@ local UI = HR.UI
 -- A EDITER a chaque version (+ bumper ## Version dans le .toc pour re-declencher).
 local SECTIONS = {
     {
-        title = "Patch 12.1 ready",
-        text  = "New dungeon pool, bosses and timelines are in.",
+        title = "Sync your plan to the group",
+        text  = "Push the plan you are playing straight to your party with the new Sync button. "
+             .. "Everyone running the addon gets it imported and set as their active plan. "
+             .. "No click, no duplicate, no re-import required from your group.",
     },
     {
-        title = "Homepage & keystone queue",
-        text  = "New homepage with your group keystones listed. Queue up for the selected keystone from there!",
-    },
-    {
-        title = "Hide other bossmod bars",
-        text  = "New options to hide other bossmod bars in mythic+. Only applies to dungeons.",
-    },
-    {
-        title = "Attach to other bossmod bars",
-        text  = "You can choose to use your favorite bossmod bars and still have planned CDs attached to them.",
+        title = "Personal Timeline & Announcements",
+        text  = "New Maximum upcoming spells option: show only the next few cooldowns instead "
+             .. "of the whole fight (0 shows all).",
     },
 }
 

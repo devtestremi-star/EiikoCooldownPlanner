@@ -2,7 +2,7 @@
 ## Title: EiikoCooldownPlannerDev
 ## Notes: Plan healer defensive cooldowns against boss abilities
 ## Author: Eiiko
-## Version: 1.0.0
+## Version: 1.1.0
 ## IconTexture: Interface\AddOns\EiikoCooldownPlannerDev\Media\icon
 ## SavedVariables: HealPlannerDB, ECPlannerDB, ECPDevLog, ECPDevScan
 ## SavedVariablesPerCharacter: HealPlannerCharDB
@@ -79,5 +79,9 @@ UI\TimelineBox.lua
 UI\ProgressBars.lua
 
 Core\TTS.lua
+
+# Raccourci clavier d'ouverture (Bindings.xml est charge tout seul depuis la RACINE de
+# l'addon : il ne se liste PAS ici). Apres Core\Events.lua, qui definit HR:RegisterEvent.
+Core\Keybind.lua
 
 Core\Commands.lua

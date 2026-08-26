@@ -448,6 +448,7 @@ end
 local function BuildGeneralTab(panel)
     local SECTION_GAP = 16
     local COL2_X = 360                       -- x de la 2e colonne (Alert | Glow cote a cote)
+    local COL3_X = 720                       -- x de la 3e colonne (Keybinding), panneau ~1010 de large
     -- Layout en COLONNES : `colX` = origine x de la colonne courante, `y` = son curseur vertical.
     -- setColumn() bascule de colonne -> permet une grille simple (vs mono-colonne).
     local colX, y, firstHeader = 0, { -6 }, true
@@ -605,6 +606,83 @@ local function BuildGeneralTab(panel)
         y[1] = y[1] - 30
         return btn, cl
     end
+    -- Rangee de RACCOURCI : libelle + bouton qui affiche la touche courante, clic = mode
+    -- CAPTURE (la frappe suivante devient la touche), plus un bouton Clear. Meme forme que
+    -- channelDropdown ; il n'existe aucun widget de capture de touche dans le codebase, on le
+    -- fabrique ici. Le clavier n'est confisque que PENDANT la capture (sinon la fenetre
+    -- volerait toutes les frappes). Toute la manipulation de bindings passe par HR.Keybind.
+    local KEY_IGNORED = {                     -- modificateurs NUS : ils ne valident pas la saisie
+        LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true,
+        LALT = true, RALT = true, UNKNOWN = true,
+    }
+    local function keybindRow(label, tooltip)
+        local KB = HR.Keybind
+        local cl = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        cl:SetPoint("TOPLEFT", colX + 12, y[1]); cl:SetText(label)
+        local btn = UI.Components.TextButton(panel, { text = "", autoWidth = true, padX = 12, padY = 5, minWidth = 120 })
+        btn:SetPoint("LEFT", cl, "RIGHT", 10, 0)
+        y[1] = y[1] - 30
+        local clr = UI.Components.TextButton(panel, { text = "Clear", autoWidth = true, padX = 10, padY = 4, minWidth = 0 })
+        clr:SetPoint("TOPLEFT", colX + 14, y[1])      -- sous la rangee : la colonne est etroite
+        y[1] = y[1] - 30
+
+        local capturing = false
+        local function refresh()
+            if capturing then return end              -- ne pas ecraser le "Press a key..."
+            btn:SetText((KB and KB.CurrentLabel()) or "Not bound")
+        end
+        local function stopCapture()
+            if not capturing then return end
+            capturing = false
+            btn:EnableKeyboard(false)
+            btn:SetPropagateKeyboardInput(true)       -- rendre le clavier au reste de l'UI
+            btn:SetScript("OnKeyDown", nil)
+            btn:SetSelected(false)
+            refresh()
+        end
+        local function onKey(_, key)
+            if not capturing then return end
+            if key == "ESCAPE" then stopCapture() return end   -- annulation (la fenetre ne se ferme pas :
+            if KEY_IGNORED[key] then return end                --  le clavier ne se propage pas pendant la capture)
+            -- Ordre canonique des chaines de binding : ALT-CTRL-SHIFT-<TOUCHE>.
+            local chord = key
+            if IsShiftKeyDown()   then chord = "SHIFT-" .. chord end
+            if IsControlKeyDown() then chord = "CTRL-" .. chord end
+            if IsAltKeyDown()     then chord = "ALT-" .. chord end
+            -- Choix EXPLICITE du joueur -> on prend la touche meme si elle servait ailleurs
+            -- (comme le menu Raccourcis natif), en nommant l'action depossedee. La pose
+            -- AUTOMATIQUE du defaut, elle, ne vole jamais rien (cf. Core/Keybind.lua).
+            local prev = GetBindingAction(chord)
+            if prev == "" or prev == (KB and KB.ACTION) then prev = nil end
+            local ok = KB and KB.Set(chord)
+            stopCapture()
+            if ok and prev then
+                HR:Print(("%s was bound to %s -- it now opens the planner.")
+                    :format(chord, (GetBindingName and GetBindingName(prev)) or prev))
+            end
+        end
+
+        btn:SetOnClick(function()
+            if capturing then stopCapture() return end
+            capturing = true
+            btn:SetText("Press a key... (Esc cancels)")
+            btn:SetSelected(true)
+            btn:EnableKeyboard(true)
+            btn:SetPropagateKeyboardInput(false)      -- pendant la capture, aucune frappe ne part ailleurs
+            btn:SetScript("OnKeyDown", onKey)
+        end)
+        -- Fenetre fermee / onglet change en pleine capture : ne pas laisser le clavier
+        -- confisque par un bouton cache.
+        btn:SetScript("OnHide", stopCapture)
+        clr:SetOnClick(function() if KB then KB.Clear() end refresh() end)
+
+        addTip(btn, label, tooltip)
+        refresh()
+        -- Le menu Raccourcis NATIF est l'autre point de reglage : son UPDATE_BINDINGS
+        -- resynchronise cette rangee (listener dans Core/Keybind.lua).
+        UI.RefreshKeybindRow = refresh
+        return btn, cl
+    end
 
     -- ===== En-tete : boutons (au-dessus des sections) =====
     setColumn(0)
@@ -751,6 +829,14 @@ local function BuildGeneralTab(panel)
     pv.icon.tex:SetTexture(HR.GetDefensiveIcon("SMALL_DEF"))   -- placeholder "Defensive" (coherence)
 
     refreshAvail(); glowRefresh()
+
+    -- ===== Colonne 3 : Keybinding (2e point de reglage ; l'autre est le menu Raccourcis natif) =====
+    setColumn(COL3_X, topEnd)
+    header("Keybinding"); separator()
+    keybindRow("Open planner",
+        "Key that opens the planner. Pressing it while the window is already open jumps back to "
+        .. "the homepage -- it never closes the window (use Escape for that). Also editable in "
+        .. "the game's Key Bindings menu, under EiikoCooldownPlanner.")
 end
 
 -- ===== Profils : dialogs CUSTOM (modeles sur le SELECT DE VARIANTE) =====

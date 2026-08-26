@@ -1,0 +1,18 @@
+<Bindings>
+    <!--
+        Raccourci d'ouverture de l'addon. Ce fichier est charge AUTOMATIQUEMENT par le client
+        depuis la racine de l'addon : il ne figure PAS dans le .toc (qui ne liste que du Lua).
+
+        `category` = le GROUPE affiche dans Options > Touches. Le client resout _G[category]
+        et retombe sur la chaine brute : on met donc le nom de l'addon EN CLAIR (meme forme
+        que AlterEgo / EllesmereUI, qui s'affichent bien sur ce client). Surtout PAS "ADDONS",
+        qui resout la globale Blizzard du meme nom et noie l'entree dans un fourre-tout.
+
+        Le corps s'execute a l'APPUI (runOnUp="false" par defaut) et ne voit que les GLOBALES
+        -> d'ou EiikoCooldownPlanner_OnKeybind, meme statut que la fonction du compartiment
+        d'addons. Le libelle de la ligne vient de BINDING_NAME_ECPLANNER_OPEN (Core/Keybind.lua).
+    -->
+    <Binding name="ECPLANNER_OPEN" category="EiikoCooldownPlanner">
+        EiikoCooldownPlanner_OnKeybind()
+    </Binding>
+</Bindings>

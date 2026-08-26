@@ -715,6 +715,19 @@ end
 
 function UI.BuildHealerSpecs(parent)
     if UI.specsPanel then return UI.specsPanel end
+
+    -- Le bouton Sync depend de la presence d'un groupe : rejoindre ou quitter un groupe doit
+    -- rafraichir son etat, sinon il reste grise (ou actif a tort) jusqu'au prochain rendu.
+    -- L'enregistrement vit ICI et pas au scope du fichier : UI/HealerSpecs.lua est charge
+    -- AVANT Core/Events.lua (cf. .toc), donc HR:RegisterEvent n'existe pas encore au load.
+    -- Ce Build est paresseux (1er rendu du panneau) -> bien apres l'init.
+    if not UI._specsRosterHooked then
+        UI._specsRosterHooked = true
+        HR:RegisterEvent("GROUP_ROSTER_UPDATE", function()
+            if UI.specsPanel and UI.specsPanel:IsShown() then UI.RenderHealerSpecs() end
+        end)
+    end
+
     local p = CreateFrame("Frame", nil, parent)
     p:SetHeight(UI.SPECS_H)
 
@@ -891,6 +904,9 @@ function UI.BuildHealerSpecs(parent)
             body = body .. "\n|cffff6060Unavailable:|r this plan was received from "
                 .. ((cur.syncFrom and cur.syncFrom.name) or "another player")
                 .. ". Duplicate it to make it yours."
+        elseif HR.Sync and HR.Sync.Net and HR.Sync.Net.HasAudience
+            and not HR.Sync.Net.HasAudience() then
+            body = body .. "\n|cffff6060Unavailable:|r you are not in a party or raid."
         end
         return body
     end)
@@ -952,9 +968,13 @@ local function RenderVariantControls(p, v)
     p.varImport:ClearAllPoints(); p.varImport:SetPoint("RIGHT", p.varExport, "LEFT", -6, 0)
     p.varReset:ClearAllPoints();  p.varReset:SetPoint("RIGHT", p.varImport, "LEFT", -6, 0)
 
-    -- Sync : seulement SON PROPRE plan. Un plan recu d'un tiers n'est pas re-poussable
-    -- (il appartient a son auteur) -- le joueur doit le dupliquer pour se l'approprier.
-    local canSync = (v and not v.synced) and true or false
+    -- Sync : seulement SON PROPRE plan, et seulement s'il y a QUELQU'UN a qui le pousser.
+    -- Un plan recu d'un tiers n'est pas re-poussable (il appartient a son auteur) -- le joueur
+    -- doit le dupliquer pour se l'approprier. Solo = rien a pousser : s'envoyer son propre plan
+    -- a soi-meme n'a aucun sens (cf. Net.GroupChannel). Rafraichi sur GROUP_ROSTER_UPDATE.
+    local audience = not (HR.Sync and HR.Sync.Net and HR.Sync.Net.HasAudience)
+        or HR.Sync.Net.HasAudience()
+    local canSync = (v and not v.synced and audience) and true or false
     p.varSync:SetEnabled(canSync); p.varSync:SetAlpha(canSync and 1 or 0.4)
 
     -- Set template : actif seulement pour une variante healer-seul pas encore template.

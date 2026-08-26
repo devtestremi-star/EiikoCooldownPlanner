@@ -70,7 +70,14 @@ function PlanSync.Push(dID, variant)
         HR:Print("Failed to encode the plan (C_EncodingUtil unavailable?).")
         return
     end
+    -- Personne a qui pousser : en solo, l'echo local se renvoyait le plan a soi-meme et le
+    -- chemin de reception le RE-IMPORTAIT en variante "SYNC" -- un doublon de son propre plan
+    -- dans sa propre DB. On refuse en amont plutot que de filtrer a l'arrivee.
     local channel, target = Net.GroupChannel()
+    if not channel then
+        HR:Print("You are not in a party or raid -- there is nobody to sync this plan with.")
+        return
+    end
     -- "|" est hors de l'alphabet base64 url-safe -> separateur sur.
     local msgId = Net.Send("PLAN", tostring(variant.id) .. "|" .. data, channel, target)
     if not msgId then

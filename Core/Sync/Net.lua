@@ -40,10 +40,14 @@ sender:SetScript("OnUpdate", function(self)
     end
 end)
 
--- Canal de diffusion + cible eventuelle. En SOLO : message addon adresse a soi-meme
--- (echo local) -> toute la chaine trame/decoupe/reassemblage/aiguillage s'exerce sans
--- second client. Contrairement a Share.GroupChannel, pas de garde HR.debug : un
--- handshake n'a aucun effet de bord (rien n'est ecrit, rien n'est visible par autrui).
+-- Canal de diffusion + cible eventuelle, ou nil quand il n'y a PERSONNE a qui parler.
+-- SOLO = nil, et c'est delibere : l'echo local (message addon adresse a soi-meme) faisait
+-- suivre a la poussee tout le chemin de RECEPTION, donc l'auto-import -- on se creait une
+-- variante "SYNC" en double dans sa propre DB pour un plan qu'on possede deja. L'echo
+-- reste disponible, mais SEULEMENT sous HR.debug (HealPlannerDB.debug, restaure au load
+-- par Core/Database.lua) : c'est un outil de dev -- exercer la chaine trame/decoupe/
+-- reassemblage/aiguillage sans second client --, pas un mode de jeu.
+-- Chaque appelant doit donc traiter le nil (cf. PlanSync.Push, Handshake.Broadcast).
 function Net.GroupChannel()
     -- Categorie HOME UNIQUEMENT (le groupe qu'on a FORME : invitations, guilde, premade M+).
     -- Un groupe d'INSTANCE (donjon aleatoire, LFR : LE_PARTY_CATEGORY_INSTANCE, canal
@@ -52,11 +56,18 @@ function Net.GroupChannel()
     -- Passer la categorie explicitement compte : sans argument, IsInGroup() repond "oui" pour
     -- un groupe de file, on prendrait la branche PARTY et le serveur jetterait le message
     -- sans erreur (canal auquel on n'appartient pas). Ici, pas de groupe HOME = rien a pousser
-    -- -> repli sur l'echo local.
+    -- -> nil (ou l'echo local si le mode debug est actif).
     local HOME = LE_PARTY_CATEGORY_HOME or 1
     if IsInRaid(HOME) then return "RAID" end
     if IsInGroup(HOME) then return "PARTY" end
-    return "WHISPER", UnitName("player")
+    if HR.debug then return "WHISPER", UnitName("player") end   -- echo local : dev uniquement
+    return nil
+end
+
+-- Y a-t-il quelqu'un a qui pousser quelque chose ? (l'UI s'en sert pour griser le bouton
+-- Sync ; la decision qui fait foi reste celle de GroupChannel, cote emission)
+function Net.HasAudience()
+    return Net.GroupChannel() ~= nil
 end
 
 -- msgId envoyes a NOUS-MEMES (echo local en solo). Le listener s'en sert pour accepter nos

@@ -111,7 +111,11 @@ function UI.ShowPrerunReminder(dID)
         f.icons:Show()
         UI.LayoutVariantIcons(f.icons, f.iconPool, 0, 0, v, ICON_SZ, 5)
         f.btnSync:Show()
-        local canSync = not v.synced
+        -- Grise aussi quand on est SEUL : pousser un plan a soi-meme n'a aucun sens
+        -- (cf. Net.GroupChannel, qui refuse l'envoi hors groupe).
+        local audience = not (HR.Sync and HR.Sync.Net and HR.Sync.Net.HasAudience)
+            or HR.Sync.Net.HasAudience()
+        local canSync = (not v.synced) and audience
         f.btnSync:SetEnabled(canSync); f.btnSync:SetAlpha(canSync and 1 or 0.4)
     else
         -- Aucune variante disponible pour ce donjon.
