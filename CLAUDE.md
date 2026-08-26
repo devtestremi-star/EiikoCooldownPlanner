@@ -136,8 +136,14 @@ UI/
   SyncFrame.lua          # modale de PROGRESSION d'une poussee (bouton Sync) : 1 ligne par membre
                          #   du groupe + spinner (8 points, zero texture) jusqu'au verdict —
                          #   `Sync success` (SYNC_OVER recu) / `Sync failed` (SYNC_START mais pas
-                         #   SYNC_OVER) / `Addon missing` (muet). Timeout 5 s. N'affiche que :
-                         #   l'etat lui est pousse par Core/Sync/PlanSync.lua.
+                         #   SYNC_OVER) / `Addon missing` (muet). Timeout 5 s. Cote progression
+                         #   elle n'AFFICHE que : l'etat lui est pousse par Core/Sync/PlanSync.lua.
+                         #   Seule action portee : bouton **Advertize** (`UI.AdvertizeAddon`) —
+                         #   annonce PUBLIQUE `/p` ou `/raid` reprenant mot pour mot le message de
+                         #   l'ancien partage par lien (nom du joueur + URL CurseForge), pour les
+                         #   membres SANS l'addon chez qui une poussee est muette. Anti-spam 30 s.
+                         #   ⚠️ Ce n'est PAS un retour du partage par lien : aucun hyperlien,
+                         #   aucune donnee de plan sur le fil.
   RuntimeBox.lua         # affichage combat : Upcoming bar + Communication bar + reconnaissance
                          #   des events serveur (ENCOUNTER_TIMELINE) par durée (partagée TimelineBox)
   TimelineBox.lua        # Timeline défilante (vue alternative, option timelineMode) : colonne

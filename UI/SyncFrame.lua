@@ -7,7 +7,9 @@
 --   Addon missing  aucune reponse du tout dans la fenetre de 5 s
 --
 -- Le spinner ne s'arrete que sur un verdict : reponse finale, ou expiration du delai.
--- Cette modale n'AFFICHE que : l'etat lui est pousse par Core/Sync/PlanSync.lua.
+-- Cote PROGRESSION la modale n'AFFICHE que : l'etat lui est pousse par Core/Sync/PlanSync.lua.
+-- Seule action qu'elle porte : le bouton "Advertize" (annonce publique dans le chat de groupe,
+-- pour les membres SANS l'addon, chez qui une poussee est muette). Cf. UI.AdvertizeAddon.
 local addonName, HR = ...
 
 HR.UI = HR.UI or {}
@@ -16,6 +18,13 @@ local UI = HR.UI
 local WINDOW  = 5      -- (s) delai avant de trancher pour les silencieux
 local ROW_H   = 30
 local SPIN_SZ = 16
+
+-- Page de telechargement, citee dans l'annonce publique du bouton "Advertize".
+local ADDON_URL = "https://www.curseforge.com/wow/addons/eiikocooldownplanner"
+-- Anti-spam : un seul message par ANTISPAM secondes. Le bouton reste cliquable -- on prefere
+-- dire POURQUOI rien n'est parti plutot que de le griser sans explication.
+local ANTISPAM = 30
+local lastAdv  = 0
 
 -- Etat de la passe affichee : { msgId, rows = { [nomQualifie] = row }, order = { row, ... } }
 local pass = nil
@@ -119,6 +128,24 @@ local function Build()
         padX = 15, padY = 9, onClick = function() m:Hide() end })
     m.close2:SetPoint("BOTTOMRIGHT", -18, 14)
 
+    -- "Advertize" : annonce PUBLIQUE dans le canal de groupe, pour les membres qui n'ont pas
+    -- l'addon (la poussee de plan, elle, est muette chez eux). Reprend mot pour mot le message
+    -- que l'ancien partage par lien envoyait automatiquement.
+    -- ⚠️ Ce n'est PAS une reintroduction du partage par lien (retire le 2026-08-26) : aucun
+    -- hyperlien, aucune donnee de plan sur le fil, juste une phrase et l'URL de telechargement.
+    m.advertize = UI.Components.TextButton(c, { text = "Advertize", autoWidth = true, minWidth = 0,
+        padX = 15, padY = 9, onClick = function() UI.AdvertizeAddon() end })
+    m.advertize:SetPoint("RIGHT", m.close2, "LEFT", -6, 0)
+    UI.Components.AttachHelpTip(m.advertize, "Advertize", function()
+        local ch = HR.Sync and HR.Sync.Net and HR.Sync.Net.GroupChannel()
+        local body = "Post a public message in party/raid chat telling the group you sync your "
+            .. "plans with ECP, with the download link. Nothing about the plan itself is sent."
+        if ch ~= "PARTY" and ch ~= "RAID" then
+            body = body .. "\n|cffff6060Unavailable:|r you are not in a party or raid."
+        end
+        return body
+    end)
+
     m.rowPool = {}
     m:Hide()
     UI.syncFrame = m
@@ -185,6 +212,31 @@ end
 
 -- Ouvre la modale pour la poussee `msgId`. Une ligne par AUTRE membre du groupe ; en solo
 -- (aucun autre membre), une ligne pour soi -- l'echo local repond, la chaine se teste seule.
+-- Annonce PUBLIQUE dans le canal de groupe. Message repris TEL QUEL de l'ancien partage par
+-- lien : c'est la seule chose qui manque a un membre SANS l'addon, chez qui une poussee de plan
+-- est totalement muette. On ne poste QUE dans un vrai groupe (PARTY/RAID) -- le canal WHISPER
+-- que Net.GroupChannel renvoie en mode debug est un echo local, pas une annonce.
+-- ⚠️ Ce n'est PAS une reintroduction du partage par lien (retire le 2026-08-26) : aucun
+-- hyperlien, aucune donnee de plan sur le fil, juste une phrase et l'URL de telechargement.
+function UI.AdvertizeAddon()
+    local ch = HR.Sync and HR.Sync.Net and HR.Sync.Net.GroupChannel()
+    if ch ~= "PARTY" and ch ~= "RAID" then
+        HR:Print("You are not in a party or raid -- nobody would see the announcement.")
+        return
+    end
+    local now = GetTime()
+    if now - lastAdv < ANTISPAM then
+        HR:Print(("Already announced %ds ago -- wait a moment before posting again.")
+            :format(math.floor(now - lastAdv)))
+        return
+    end
+    lastAdv = now
+    SendChatMessage(
+        ("[EiikoCooldownPlanner - ECP] : %s shared a healing plan. Download ECP at %s")
+            :format(UnitName("player") or "?", ADDON_URL),
+        ch)
+end
+
 function UI.OpenSyncProgress(msgId, planName, dungeonName)
     local m = UI.syncFrame or Build()
 
