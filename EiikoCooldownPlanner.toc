@@ -1,0 +1,72 @@
+## Interface: 120005
+## Title: EiikoCooldownPlanner
+## Notes: Plan healer defensive cooldowns against boss abilities
+## Author: Remi
+## Version: 1.0.0
+## IconTexture: Interface\AddOns\EiikoCooldownPlanner\Media\icon
+## SavedVariables: HealPlannerDB, ECPlannerDB, ECPDevLog, ECPDevScan
+## SavedVariablesPerCharacter: HealPlannerCharDB
+## AddonCompartmentFunc: HealPlanner_OnAddonCompartmentClick
+## AllowAddOnTableAccess: 1
+## Category: Mythic+
+## X-Curse-Project-ID:
+## X-Wago-ID:
+
+# Librairies embarquees (publiques) : glow des sorts dans timeline/upcoming (UI non-securisee),
+# et echange des cles M+ du groupe (LibKeystone v11 VERBATIM, aussi embarquee par BigWigs/DBM
+# -> LibStub dedoublonne ; ne PAS la modifier localement, les mises a jour sont du drop-in).
+Libs\LibStub\LibStub.lua
+Libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
+Libs\LibKeystone\LibKeystone.lua
+
+Core\Constants.lua
+Core\Util.lua
+Core\DevLog.lua
+Core\Assets.lua
+Core\Colors.lua
+Core\Theme.lua
+Core\Glow.lua
+Core\Database.lua
+
+Data\Defensives.lua
+Data\Content.lua
+Data\Roster.lua
+Data\HealerDefaults.lua
+
+Core\Planner.lua
+Core\Plans.lua
+Core\Plan2.lua
+Core\ShareText.lua
+Core\BossSettings.lua
+Core\Matcher.lua
+Core\Schedule.lua
+
+UI\Components.lua
+UI\ConfigFrame.lua
+UI\HomePage.lua
+UI\HealerSpecs.lua
+UI\ImportText.lua
+UI\PlanTimeline.lua
+UI\VariantBar.lua
+UI\ShareFrame.lua
+UI\WhatsNew.lua
+UI\PrerunReminder.lua
+
+Core\Core.lua
+Core\Events.lua
+Core\GroupScan.lua
+Core\LFGService.lua
+Core\Keystones.lua
+Core\Capture.lua
+Core\Macros.lua
+Core\Share.lua
+Core\ForeignBars.lua
+
+UI\RuntimeBox.lua
+Core\BossModAttach.lua
+UI\TimelineBox.lua
+UI\ProgressBars.lua
+
+Core\TTS.lua
+
+Core\Commands.lua

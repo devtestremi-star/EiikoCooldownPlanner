@@ -1,0 +1,61 @@
+category,key,spellID,name,class,spec,role,defType,short,cooldown,external,choiceNode,talents_required,talents_not_possessed,comment
+EXTERNAL,51052:0,51052,Anti-Magic Zone (3 min),DEATHKNIGHT,,,,AMZ,180,yes,,"51052, 374383",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+EXTERNAL,51052:1,51052,Anti-Magic Zone (4 min),DEATHKNIGHT,,,,AMZ,240,yes,,51052,374383,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+EXTERNAL,196718:0,196718,Darkness (5 min),DEMONHUNTER,,,,Dark,300,yes,,196718,389783,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+EXTERNAL,196718:1,196718,Darkness (3 min),DEMONHUNTER,,,,Dark,180,yes,,"196718, 389783",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+EXTERNAL,374227,374227,Zephyr,EVOKER,,DAMAGER,,Zeph,120,yes,,374227,,aoeOnly
+EXTERNAL,15286,15286,Vampiric Embrace,PRIEST,Shadow,,,Vamp,120,yes,,,,
+EXTERNAL,97462,97462,Rallying Cry,WARRIOR,,,,Rally,180,yes,,97462,,
+HEAL,RAMP,,Ramp,,,HEALER,,Ramp,0,no,,,,
+HEAL,132158:0,132158,Nature's Swiftness (1 min),DRUID,,HEALER,,NS,60,no,,132158,382550,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,132158:1,132158,Nature's Swiftness (45 sec),DRUID,,HEALER,,NS,45,no,,"132158, 382550",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,33891:0,33891,Incarnation: Tree of Life (3 min),DRUID,,HEALER,,Inc,180,no,2,33891,393371,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,33891:1,33891,Incarnation: Tree of Life (2 min),DRUID,,HEALER,,Inc,120,no,2,"33891, 393371",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,391528:0,391528,Convoke the Spirits,DRUID,,HEALER,,Conv,120,no,2,391528,393371,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,391528:1,391528,Convoke the Spirits,DRUID,,HEALER,,Conv,60,no,2,"391528, 393371",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,740:0,740,Tranquility (3 min),DRUID,,HEALER,,Tranq,180,no,,740,197073,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,740:1,740,Tranquility (2 min 30),DRUID,,HEALER,,Tranq,150,no,,"740, 197073",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,359816,359816,Dream Flight,EVOKER,,HEALER,,DF,120,no,3,359816,,
+HEAL,363534:0,363534,Rewind (3 min),EVOKER,,HEALER,,Rew,180,no,,363534,381922,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,363534:1,363534,Rewind (2 min),EVOKER,,HEALER,,Rew,120,no,,"363534, 381922",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,370537,370537,Stasis,EVOKER,,HEALER,,Sta,90,no,3,370537,,
+HEAL,374227:heal,374227,Zephyr,EVOKER,,HEALER,,Zeph,120,no,,374227,,"aoeOnly CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,115310,115310,Revival,MONK,,HEALER,,Rev,180,no,4,115310,,
+HEAL,322118:0,322118,Invoke Yu'lon (1 min),MONK,,HEALER,,Yulon,60,no,1,"322118, 388212",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,322118:1,322118,Invoke Yu'lon (2 min),MONK,,HEALER,,Yulon,120,no,1,322118,388212,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,325197:0,325197,Invoke Chi-Ji (1 min),MONK,,HEALER,,Chi,60,no,1,"325197, 388212",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,325197:1,325197,Invoke Chi-Ji (2 min),MONK,,HEALER,,Chi,120,no,1,325197,388212,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,388615,388615,Restoral,MONK,,HEALER,,Res,180,no,4,388615,,
+HEAL,443028,443028,Celestial Conduit,MONK,,HEALER,,Cond,90,no,,443028,,
+HEAL,114165:0,114165,Holy Prism (45 sec),PALADIN,,HEALER,,Prism,45,no,8,114165,379391,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,114165:1,114165,Holy Prism (30 sec),PALADIN,,HEALER,,Prism,30,no,8,"114165, 379391",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,216331:0,216331,Avenging Crusader (1 min),PALADIN,,HEALER,,AC,120,no,5,216331,1241511,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,216331:1,216331,"Avenging Crusader (52,5 sec)",PALADIN,,HEALER,,AC,105,no,5,"216331, 1241511",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,31821:0,31821,Aura Mastery (3 min),PALADIN,,HEALER,,Aura,180,no,,31821,392911,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,31821:1,31821,Aura Mastery (2 min 30),PALADIN,,HEALER,,Aura,150,no,,"31821, 392911",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,31884:0,31884,Avenging Wrath (2 min),PALADIN,,HEALER,,AW,120,no,5,31884,1241511,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,31884:1,31884,Avenging Wrath (1 min 45),PALADIN,,HEALER,,AW,105,no,5,"31884, 1241511",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,375576:0,375576,Divine Toll (45 sec),PALADIN,,HEALER,,Toll,45,no,8,375576,379391,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,375576:1,375576,Divine Toll (30 sec),PALADIN,,HEALER,,Toll,30,no,8,"375576, 379391",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,200183,200183,Apotheosis,PRIEST,Holy,HEALER,,Apo,120,no,,200183,,
+HEAL,421543,421453,Ultimate Penitence,PRIEST,Discipline,HEALER,,UP,240,no,6,421453,,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,472433,472433,Evangelism,PRIEST,Discipline,HEALER,,Eva,90,no,,472433,,
+HEAL,47788,47788,Guardian Spirit,PRIEST,Holy,HEALER,,GS,120,no,,47788,,
+HEAL,62618,62618,Power Word: Barrier,PRIEST,Discipline,HEALER,,PWB,180,no,6,62618,,
+HEAL,64843:0,64843,Divine Hymn (3 min),PRIEST,Holy,HEALER,,Hymn,180,no,,64843,419110,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,64843:1,64843,Divine Hymn (2 min),PRIEST,Holy,HEALER,,Hymn,120,no,,"64843, 419110",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,108280:0,108280,Healing Tide Totem (2 min),SHAMAN,,HEALER,,HTT,120,no,7,"108280, 462440",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,108280:1,108280,Healing Tide Totem (3 min),SHAMAN,,HEALER,,HTT,180,no,7,108280,462440,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,114052:0,114052,Ascendance (2 min),SHAMAN,,HEALER,,Asc,120,no,7,"114052, 462440",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,114052:1,114052,Ascendance (3 min),SHAMAN,,HEALER,,Asc,180,no,7,114052,462440,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,378081,378081,Nature's Swiftness,SHAMAN,,HEALER,,NS,60,no,,,443454,
+HEAL,443454,443454,Ancestral Swiftness,SHAMAN,,HEALER,,AncS,30,no,,443454,,
+HEAL,98008,98008,Spirit Link Totem,SHAMAN,,HEALER,,SLT,180,no,,98008,,
+TRINKET,1291894,1291894,Soulcoiler Ritual Vessel,,,,,Vessel,120,no,,,,trinket itemId 270162
+GENERIC,EMPTY_BAG,,Empty the bag,,,,,Bag,0,no,,,,
+GENERIC,SMALL_DEF,,Defensive,,,,,Def,90,no,,,,
+HEAL,DELETE,DELETE,Spirit Shell,PRIEST,Discipline,HEALER,,Shell,60,no,,,,
+HEAL,DELETE,DELETE,Luminous Barrier,PRIEST,Discipline,HEALER,,Lumi,180,no,,,,
+HEAL,DELETE,DELETE,Symbol of Hope,PRIEST,Holy,HEALER,,Hope,300,no,,,,
+HEAL,DELETE,DELETE,Holy Word Salvation,PRIEST,Holy,HEALER,,Salv,720,no,,,,
+EXTERNAL,DELETE,DELETE,Litany of Lightblind Wrath,,,,,Lit,90,yes,,,,itemId 249808 (retire 12.1 : plus utilise apres le changement de saison)

@@ -1,0 +1,23 @@
+# êditeurs
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Build / packaging
+.release/
+dist/
+*.zip
+
+# Lua
+*.luac
+luacov.stats.out
+luacov.report.out
+
+# Sauvegardes
+*.bak
+*~

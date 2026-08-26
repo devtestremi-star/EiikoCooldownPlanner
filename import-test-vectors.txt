@@ -1,0 +1,62 @@
+# Vecteurs de test ECP - format ecp;2 (identifiants opaques p1/p2)
+# Sequence conseillee : importer d abord le VARIANT, puis le BOSS du meme donjon.
+
+========================================================================
+12.1 - VARIANT (Altar of Fangs, zoneID 2993)
+========================================================================
+ecp;2;variant
+z;2993
+n;Import%20test
+r;p1;HEALER;PRIEST;257;Holy;64843,419110
+r;p2;DAMAGER;DEATHKNIGHT;251;Frost;51052,374383
+h;p1
+u;3456;1296220;1;p2;51052
+u;3456;1307894;1;p1;64843
+u;3457;1299154;1;p2;51052
+k;3
+
+ecp64:ZWNwOzI7dmFyaWFudAp6OzI5OTMKbjtJbXBvcnQlMjB0ZXN0CnI7cDE7SEVBTEVSO1BSSUVTVDsyNTc7SG9seTs2NDg0Myw0MTkxMTAKcjtwMjtEQU1BR0VSO0RFQVRIS05JR0hUOzI1MTtGcm9zdDs1MTA1MiwzNzQzODMKaDtwMQp1OzM0NTY7MTI5NjIyMDsxO3AyOzUxMDUyCnU7MzQ1NjsxMzA3ODk0OzE7cDE7NjQ4NDMKdTszNDU3OzEyOTkxNTQ7MTtwMjs1MTA1MgprOzM=
+
+========================================================================
+12.1 - BOSS (Rav'i, encID 3456)
+========================================================================
+ecp;2;boss
+b;3456
+r;p1;HEALER;PRIEST;257;Holy;64843,419110
+r;p2;DAMAGER;DEATHKNIGHT;251;Frost;51052,374383
+h;p1
+u;3456;1296216;1;p1;64843
+u;3456;1296220;1;p2;51052;-1500
+k;2
+
+ecp64:ZWNwOzI7Ym9zcwpiOzM0NTYKcjtwMTtIRUFMRVI7UFJJRVNUOzI1NztIb2x5OzY0ODQzLDQxOTExMApyO3AyO0RBTUFHRVI7REVBVEhLTklHSFQ7MjUxO0Zyb3N0OzUxMDUyLDM3NDM4MwpoO3AxCnU7MzQ1NjsxMjk2MjE2OzE7cDE7NjQ4NDMKdTszNDU2OzEyOTYyMjA7MTtwMjs1MTA1MjstMTUwMAprOzI=
+
+========================================================================
+12.0 - VARIANT (Seat of the Triumvirate, zoneID 1753)
+========================================================================
+ecp;2;variant
+z;1753
+n;Import%20test
+r;p1;HEALER;PRIEST;257;Holy;64843,419110
+r;p2;DAMAGER;DEATHKNIGHT;251;Frost;51052,374383
+h;p1
+u;2065;1263297;1;p2;51052
+u;2065;1263399;1;p1;64843
+u;2068;1265421;1;p1;64843
+k;3
+
+ecp64:ZWNwOzI7dmFyaWFudAp6OzE3NTMKbjtJbXBvcnQlMjB0ZXN0CnI7cDE7SEVBTEVSO1BSSUVTVDsyNTc7SG9seTs2NDg0Myw0MTkxMTAKcjtwMjtEQU1BR0VSO0RFQVRIS05JR0hUOzI1MTtGcm9zdDs1MTA1MiwzNzQzODMKaDtwMQp1OzIwNjU7MTI2MzI5NzsxO3AyOzUxMDUyCnU7MjA2NTsxMjYzMzk5OzE7cDE7NjQ4NDMKdTsyMDY4OzEyNjU0MjE7MTtwMTs2NDg0MwprOzM=
+
+========================================================================
+12.0 - BOSS (Zuraal, encID 2065)
+========================================================================
+ecp;2;boss
+b;2065
+r;p1;HEALER;PRIEST;257;Holy;64843,419110
+r;p2;DAMAGER;DEATHKNIGHT;251;Frost;51052,374383
+h;p1
+u;2065;1263297;1;p2;51052
+k;1
+
+ecp64:ZWNwOzI7Ym9zcwpiOzIwNjUKcjtwMTtIRUFMRVI7UFJJRVNUOzI1NztIb2x5OzY0ODQzLDQxOTExMApyO3AyO0RBTUFHRVI7REVBVEhLTklHSFQ7MjUxO0Zyb3N0OzUxMDUyLDM3NDM4MwpoO3AxCnU7MjA2NTsxMjYzMjk3OzE7cDI7NTEwNTIKazsx
+

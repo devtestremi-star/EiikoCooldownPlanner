@@ -1,0 +1,256 @@
+patch,dungeon,encounter_id,boss,boss_enabled,spell_id,spell_name,in_timeline
+12.0.x,Windrunner Spire,3056,Emberdawn,yes,466556,Flaming Updraft,yes
+12.0.x,Windrunner Spire,3056,Emberdawn,yes,465904,Burning Gale,yes
+12.0.x,Windrunner Spire,3056,Emberdawn,yes,466064,Searing Beak,no
+12.0.x,Windrunner Spire,3057,Derelict Duo,yes,472745,Splattering Spew,yes
+12.0.x,Windrunner Spire,3057,Derelict Duo,yes,472795,Heaving Yank,yes
+12.0.x,Windrunner Spire,3057,Derelict Duo,yes,472888,Bone Hack,no
+12.0.x,Windrunner Spire,3057,Derelict Duo,yes,474105,Curse of Darkness,no
+12.0.x,Windrunner Spire,3057,Derelict Duo,yes,472736,Debilitating Shriek,no
+12.0.x,Windrunner Spire,3058,Commander Kroluk,yes,468070,Rallying Bellow,yes
+12.0.x,Windrunner Spire,3058,Commander Kroluk,yes,1270620,Flame Nova,yes
+12.0.x,Windrunner Spire,3058,Commander Kroluk,yes,467620,Rampage,no
+12.0.x,Windrunner Spire,3058,Commander Kroluk,yes,470963,Bladestorm,no
+12.0.x,Windrunner Spire,3058,Commander Kroluk,yes,472081,Reckless Leap,no
+12.0.x,Windrunner Spire,3058,Commander Kroluk,yes,1253272,Intimidating Shout,no
+12.0.x,Windrunner Spire,3059,The Restless Heart,yes,472556,Arrow Rain,yes
+12.0.x,Windrunner Spire,3059,The Restless Heart,yes,468429,Bullseye Windblast,yes
+12.0.x,Windrunner Spire,3059,The Restless Heart,yes,1253986,Gust Shot,yes
+12.0.x,Windrunner Spire,3059,The Restless Heart,yes,472662,Tempest Slash,no
+12.0.x,Windrunner Spire,3059,The Restless Heart,yes,474528,Bolt Gale,no
+12.0.x,Maisara Caverns,3212,Muro'jin & Nekraxx,no,1260648,Barrage,no
+12.0.x,Maisara Caverns,3212,Muro'jin & Nekraxx,no,1246666,Infected Pinions,no
+12.0.x,Maisara Caverns,3212,Muro'jin & Nekraxx,no,1266480,Flanking Spear,no
+12.0.x,Maisara Caverns,3212,Muro'jin & Nekraxx,no,1260731,Freezing Trap,no
+12.0.x,Maisara Caverns,3212,Muro'jin & Nekraxx,no,1243900,Fetid Quillstorm,no
+12.0.x,Maisara Caverns,3212,Muro'jin & Nekraxx,no,1260643,Barrage,no
+12.0.x,Maisara Caverns,3212,Muro'jin & Nekraxx,no,1249479,Carrion Swoop,no
+12.0.x,Maisara Caverns,3213,Vordaza,yes,1251204,Wrest Phantoms,yes
+12.0.x,Maisara Caverns,3213,Vordaza,yes,1250708,Necrotic Convergence,yes
+12.0.x,Maisara Caverns,3213,Vordaza,yes,1251554,Drain Soul,no
+12.0.x,Maisara Caverns,3213,Vordaza,yes,1252054,Unmake,no
+12.0.x,Maisara Caverns,3214,"Rak'tul, Vessel of Souls",no,1251023,Spiritbreaker,no
+12.0.x,Maisara Caverns,3214,"Rak'tul, Vessel of Souls",no,1252676,Crush Souls,no
+12.0.x,Maisara Caverns,3214,"Rak'tul, Vessel of Souls",no,1253788,Soulrending Roar,no
+12.0.x,Nexus-Point Xenas,3328,Chief Corewright Kasreth,yes,1257509,Corespark Detonation,yes
+12.0.x,Nexus-Point Xenas,3328,Chief Corewright Kasreth,yes,1251579,Leyline Array,no
+12.0.x,Nexus-Point Xenas,3328,Chief Corewright Kasreth,yes,1251772,Reflux Charge,no
+12.0.x,Nexus-Point Xenas,3328,Chief Corewright Kasreth,yes,1264048,Flux Collapse,no
+12.0.x,Nexus-Point Xenas,3332,Corewarden Nysarra,yes,1249014,Eclipsing Step,yes
+12.0.x,Nexus-Point Xenas,3332,Corewarden Nysarra,yes,1247976,Lightscar Flare,yes
+12.0.x,Nexus-Point Xenas,3332,Corewarden Nysarra,yes,1247937,Umbral Lash,no
+12.0.x,Nexus-Point Xenas,3332,Corewarden Nysarra,yes,1252703,Null Vanguard,no
+12.0.x,Nexus-Point Xenas,3332,Corewarden Nysarra,yes,1264439,Lightscar Flare,no
+12.0.x,Nexus-Point Xenas,3332,Corewarden Nysarra,yes,1271684,Devour the Unworthy,no
+12.0.x,Nexus-Point Xenas,3333,Lothraxion,yes,1253855,Brilliant Dispersion,yes
+12.0.x,Nexus-Point Xenas,3333,Lothraxion,yes,1253950,Searing Rend,no
+12.0.x,Nexus-Point Xenas,3333,Lothraxion,yes,1255531,Flicker,no
+12.0.x,Nexus-Point Xenas,3333,Lothraxion,yes,1257595,Divine Guile,no
+12.0.x,Magister's Terrace,3071,Arcanotron Custos,no,474496,Repulsing Slam,no
+12.0.x,Magister's Terrace,3071,Arcanotron Custos,no,1214081,Arcane Expulsion,no
+12.0.x,Magister's Terrace,3071,Arcanotron Custos,no,1214032,Ethereal Shackles,no
+12.0.x,Magister's Terrace,3071,Arcanotron Custos,no,474345,Refueling Protocol,no
+12.0.x,Magister's Terrace,3072,Seranel Sunlash,no,1225792,Runic Mark,no
+12.0.x,Magister's Terrace,3072,Seranel Sunlash,no,1246446,Null Reaction,no
+12.0.x,Magister's Terrace,3072,Seranel Sunlash,no,1225787,Runic Mark,no
+12.0.x,Magister's Terrace,3072,Seranel Sunlash,no,1224903,Suppression Zone,no
+12.0.x,Magister's Terrace,3072,Seranel Sunlash,no,1248689,Hastening Ward,no
+12.0.x,Magister's Terrace,3072,Seranel Sunlash,no,1225193,Wave of Silence,no
+12.0.x,Magister's Terrace,3073,Gemellus,yes,1283904,Cosmic Sting,yes
+12.0.x,Magister's Terrace,3073,Gemellus,yes,1224299,Astral Grasp,yes
+12.0.x,Magister's Terrace,3073,Gemellus,yes,1223847,Triplicate,no
+12.0.x,Magister's Terrace,3073,Gemellus,yes,1284954,Cosmic Sting,no
+12.0.x,Magister's Terrace,3073,Gemellus,yes,1253709,Neural Link,no
+12.0.x,Magister's Terrace,3074,Degentrius,yes,1215897,Devouring Entropy,yes
+12.0.x,Magister's Terrace,3074,Degentrius,yes,1280113,Hulking Fragment,no
+12.0.x,Magister's Terrace,3074,Degentrius,yes,1215087,Unstable Void Essence,no
+12.0.x,Algeth'ar Academy,2562,Vexamus,yes,386181,Mana Bomb,yes
+12.0.x,Algeth'ar Academy,2562,Vexamus,yes,386544,Arcane Orbs,no
+12.0.x,Algeth'ar Academy,2562,Vexamus,yes,385958,Arcane Expulsion,no
+12.0.x,Algeth'ar Academy,2562,Vexamus,yes,386173,Mana Bomb,no
+12.0.x,Algeth'ar Academy,2562,Vexamus,yes,388537,Arcane Fissure,no
+12.0.x,Algeth'ar Academy,2563,Overgrown Ancient,yes,388623,Branch Out,yes
+12.0.x,Algeth'ar Academy,2563,Overgrown Ancient,yes,388923,Burst Forth,yes
+12.0.x,Algeth'ar Academy,2563,Overgrown Ancient,yes,388544,Barkbreaker,no
+12.0.x,Algeth'ar Academy,2563,Overgrown Ancient,yes,388796,Germinate,no
+12.0.x,Algeth'ar Academy,2564,Crawth,no,376997,Savage Peck,no
+12.0.x,Algeth'ar Academy,2564,Crawth,no,377004,Deafening Screech,no
+12.0.x,Algeth'ar Academy,2564,Crawth,no,377034,Overpowering Gust,no
+12.0.x,Algeth'ar Academy,2565,Echo of Doragosa,no,373326,Arcane Missiles,no
+12.0.x,Algeth'ar Academy,2565,Echo of Doragosa,no,1282251,Astral Blast,no
+12.0.x,Algeth'ar Academy,2565,Echo of Doragosa,no,374343,Energy Bomb,no
+12.0.x,Algeth'ar Academy,2565,Echo of Doragosa,no,388822,Power Vacuum,no
+12.0.x,Seat of the Triumvirate,2065,Zuraal the Ascended,yes,1263399,Oozing Slam,yes
+12.0.x,Seat of the Triumvirate,2065,Zuraal the Ascended,yes,1263297,Crashing Void,yes
+12.0.x,Seat of the Triumvirate,2065,Zuraal the Ascended,yes,1263440,Void Slash,no
+12.0.x,Seat of the Triumvirate,2065,Zuraal the Ascended,yes,1263282,Decimate,no
+12.0.x,Seat of the Triumvirate,2065,Zuraal the Ascended,yes,1268916,Null Palm,no
+12.0.x,Seat of the Triumvirate,2066,Saprish,yes,1263523,Overload,yes
+12.0.x,Seat of the Triumvirate,2066,Saprish,yes,1280065,Phase Dash,yes
+12.0.x,Seat of the Triumvirate,2066,Saprish,yes,245742,Shadow Pounce,no
+12.0.x,Seat of the Triumvirate,2066,Saprish,yes,1248219,Void Bomb,no
+12.0.x,Seat of the Triumvirate,2067,Viceroy Nezhar,yes,1263542,Mass Void Infusion,yes
+12.0.x,Seat of the Triumvirate,2067,Viceroy Nezhar,yes,1263538,Umbral Tentacles,yes
+12.0.x,Seat of the Triumvirate,2067,Viceroy Nezhar,yes,1263529,Collapsing Void,yes
+12.0.x,Seat of the Triumvirate,2067,Viceroy Nezhar,yes,244750,Mind Blast,no
+12.0.x,Seat of the Triumvirate,2067,Viceroy Nezhar,yes,1277358,Gates of the Abyss,no
+12.0.x,Seat of the Triumvirate,2067,Viceroy Nezhar,yes,1263528,Repulse,no
+12.0.x,Seat of the Triumvirate,2068,L'ura,yes,1265421,Dirge of Despair,yes
+12.0.x,Seat of the Triumvirate,2068,L'ura,yes,1264196,Disintegrate,no
+12.0.x,Seat of the Triumvirate,2068,L'ura,yes,1265463,Discordant Beam,no
+12.0.x,Seat of the Triumvirate,2068,L'ura,yes,1265689,Grim Chorus,no
+12.0.x,Seat of the Triumvirate,2068,L'ura,yes,1266003,Symphony of the Eternal Night,no
+12.0.x,Seat of the Triumvirate,2068,L'ura,yes,1265999,Siphon Void,no
+12.0.x,Seat of the Triumvirate,2068,L'ura,yes,1265464,Discordant Beam,yes
+12.0.x,Skyreach,1698,Ranjit,yes,153757,Fan of Blades,yes
+12.0.x,Skyreach,1698,Ranjit,yes,1252690,Gale Surge,no
+12.0.x,Skyreach,1698,Ranjit,yes,1258152,Wind Chakram,no
+12.0.x,Skyreach,1698,Ranjit,yes,156793,Chakram Vortex,no
+12.0.x,Skyreach,1699,Araknath,yes,1252877,Energize,yes
+12.0.x,Skyreach,1699,Araknath,yes,154135,Supernova,yes
+12.0.x,Skyreach,1699,Araknath,yes,154110,Fiery Smash,no
+12.0.x,Skyreach,1699,Araknath,yes,154162,Energize,no
+12.0.x,Skyreach,1700,Rukhran,yes,1253510,Sunbreak,yes
+12.0.x,Skyreach,1700,Rukhran,yes,1253519,Burning Claws,no
+12.0.x,Skyreach,1700,Rukhran,yes,159382,Searing Quills,no
+12.0.x,Skyreach,1701,High Sage Viryx,yes,1253543,Scorching Ray,yes
+12.0.x,Skyreach,1701,High Sage Viryx,yes,1253538,Scorching Ray,no
+12.0.x,Skyreach,1701,High Sage Viryx,yes,154396,Solar Blast,no
+12.0.x,Skyreach,1701,High Sage Viryx,yes,153954,Cast Down,no
+12.0.x,Skyreach,1701,High Sage Viryx,yes,1253840,Lens Flare,no
+12.0.x,Pit of Saron,1999,Forgemaster Garfrost,yes,1261847,Cryostomp,yes
+12.0.x,Pit of Saron,1999,Forgemaster Garfrost,yes,1261299,Throw Saronite,no
+12.0.x,Pit of Saron,1999,Forgemaster Garfrost,yes,1261546,Orebreaker,no
+12.0.x,Pit of Saron,1999,Forgemaster Garfrost,yes,1262029,Glacial Overload,no
+12.0.x,Pit of Saron,2001,Ick & Krick,yes,1264027,Shade Shift,yes
+12.0.x,Pit of Saron,2001,Ick & Krick,yes,1264336,Plague Expulsion,yes
+12.0.x,Pit of Saron,2001,Ick & Krick,yes,1264287,Blight Smash,no
+12.0.x,Pit of Saron,2001,Ick & Krick,yes,1264363,"Get 'Em, Ick!",no
+12.0.x,Pit of Saron,2000,Scourgelord Tyrannus,yes,1276648,Bone Infusion,yes
+12.0.x,Pit of Saron,2000,Scourgelord Tyrannus,yes,1263406,Army of the Dead,yes
+12.0.x,Pit of Saron,2000,Scourgelord Tyrannus,yes,1262745,Rime Blast,no
+12.0.x,Pit of Saron,2000,Scourgelord Tyrannus,yes,1276948,Ice Barrage,no
+12.0.x,Pit of Saron,2000,Scourgelord Tyrannus,yes,1262582,Scourgelord's Brand,no
+12.0.x,Pit of Saron,2000,Scourgelord Tyrannus,yes,1263756,Death's Grasp,no
+12.1.x,Altar of Fangs,3456,Rav'i,yes,1307894,Ravenous Stomp,yes
+12.1.x,Altar of Fangs,3456,Rav'i,yes,1296220,Triple Shot,yes
+12.1.x,Altar of Fangs,3456,Rav'i,yes,1296216,Ssscavenging,yes
+12.1.x,Altar of Fangs,3456,Rav'i,yes,1296050,Regurgitate,yes
+12.1.x,Altar of Fangs,3456,Rav'i,yes,1307703,Fresh Meat,no
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1299154,Synchronized Venom,yes
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1299053,Death Rattle,yes
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1298949,Tail Scythe,no
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1310357,Preparing Toxin,no
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1299940,Vindictive Onslaught,no
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1310547,Toxic Atrophy,no
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1300686,Assimilation,no
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1299130,Burrowing Charge,no
+12.1.x,Altar of Fangs,3457,The Writhing Coil,yes,1300044,Venom Jet,no
+12.1.x,Altar of Fangs,3458,Zul'jan,yes,1300876,Ritual of the Fang,yes
+12.1.x,Altar of Fangs,3458,Zul'jan,yes,1301413,Boneslicer,yes
+12.1.x,Altar of Fangs,3458,Zul'jan,yes,1301111,Axegrinder,no
+12.1.x,Altar of Fangs,3458,Zul'jan,yes,1301350,Chop Down,no
+12.1.x,Ruby Life Pools,2609,Melidrussa Chillworn,yes,373686,Frost Overload,yes
+12.1.x,Ruby Life Pools,2609,Melidrussa Chillworn,yes,1307297,Hailburst,no
+12.1.x,Ruby Life Pools,2609,Melidrussa Chillworn,yes,1307308,Chillstorm,no
+12.1.x,Ruby Life Pools,2609,Melidrussa Chillworn,yes,373046,Awaken Whelps,no
+12.1.x,Ruby Life Pools,2606,Kokia Blazehoof,yes,372864,Ritual of Blazebinding,yes
+12.1.x,Ruby Life Pools,2606,Kokia Blazehoof,yes,372110,Molten Boulder,no
+12.1.x,Ruby Life Pools,2606,Kokia Blazehoof,yes,372858,Searing Blows,no
+12.1.x,Ruby Life Pools,2623,Kyrakka and Erkhart Stormvein,yes,381512,Stormslam,no
+12.1.x,Ruby Life Pools,2623,Kyrakka and Erkhart Stormvein,yes,381517,Winds of Change,no
+12.1.x,Ruby Life Pools,2623,Kyrakka and Erkhart Stormvein,yes,381862,Inferno Spit,yes
+12.1.x,Ruby Life Pools,2623,Kyrakka and Erkhart Stormvein,yes,381516,Interrupting Cloudburst,yes
+12.1.x,Ruby Life Pools,2623,Kyrakka and Erkhart Stormvein,yes,381525,Roaring Firebreath,no
+12.1.x,Temple of Sethraliss,2124,Adderis and Aspix,yes,1288864,Tempest Winds,yes
+12.1.x,Temple of Sethraliss,2124,Adderis and Aspix,yes,1288428,Overload,yes
+12.1.x,Temple of Sethraliss,2124,Adderis and Aspix,yes,1289059,Gale Force,no
+12.1.x,Temple of Sethraliss,2124,Adderis and Aspix,yes,1288049,Thunder and Lightning,no
+12.1.x,Temple of Sethraliss,2125,Merektha,yes,1293048,Serpentstorm,yes
+12.1.x,Temple of Sethraliss,2125,Merektha,yes,264172,Burrow,yes
+12.1.x,Temple of Sethraliss,2125,Merektha,yes,1290797,Lightning Bite,no
+12.1.x,Temple of Sethraliss,2125,Merektha,yes,1290029,A Knot of Snakes,no
+12.1.x,Temple of Sethraliss,2125,Merektha,yes,1289109,Thunder Spit,no
+12.1.x,Temple of Sethraliss,2125,Merektha,yes,1289205,Hatch,no
+12.1.x,Temple of Sethraliss,2126,Galvazzt,yes,1309525,Induction,yes
+12.1.x,Temple of Sethraliss,2126,Galvazzt,yes,1291618,Lightning Spire,no
+12.1.x,Kings' Rest,2139,The Golden Serpent,yes,265773,Spit Gold,yes
+12.1.x,Kings' Rest,2139,The Golden Serpent,yes,265781,Serpentine Gust,yes
+12.1.x,Kings' Rest,2139,The Golden Serpent,yes,265910,Tail Thrash,no
+12.1.x,Kings' Rest,2139,The Golden Serpent,yes,265923,Lucre's Call,no
+12.1.x,Kings' Rest,2142,Mchimba the Embalmer,yes,267618,Drain Fluids,yes
+12.1.x,Kings' Rest,2142,Mchimba the Embalmer,yes,1311956,Burn Corruption,yes
+12.1.x,Kings' Rest,2142,Mchimba the Embalmer,yes,1312146,Awakening Slam,yes
+12.1.x,Kings' Rest,2142,Mchimba the Embalmer,yes,267702,Entomb,no
+12.1.x,Kings' Rest,2143,King Dazar,yes,1303327,Quaking Leap,yes
+12.1.x,Kings' Rest,2143,King Dazar,yes,1303267,Gilded Destruction,yes
+12.1.x,Kings' Rest,2143,King Dazar,yes,269230,Hunting Leap,no
+12.1.x,Kings' Rest,2143,King Dazar,yes,269369,Deathly Roar,no
+12.1.x,Kings' Rest,2143,King Dazar,yes,1303115,Aerial Smash,no
+12.1.x,Kings' Rest,2143,King Dazar,yes,268586,Blade Combo,no
+12.1.x,Kings' Rest,2143,King Dazar,yes,1303488,Savage Maul,no
+12.1.x,The Blinding Vale,3199,Lightblossom Trinity,yes,1234753,Bedrock Slam,yes
+12.1.x,The Blinding Vale,3199,Lightblossom Trinity,yes,1235564,Lightblossom Beam,yes
+12.1.x,The Blinding Vale,3199,Lightblossom Trinity,yes,1234850,Lightsower Dash,no
+12.1.x,The Blinding Vale,3199,Lightblossom Trinity,yes,1234802,Fertile Loam,no
+12.1.x,The Blinding Vale,3199,Lightblossom Trinity,yes,1235828,Light-Scorched Earth,no
+12.1.x,The Blinding Vale,3199,Lightblossom Trinity,yes,1235640,Thornblade,no
+12.1.x,The Blinding Vale,3200,Ikuzz the Light Hunter,yes,1236746,Verdant Stomp,yes
+12.1.x,The Blinding Vale,3200,Ikuzz the Light Hunter,yes,1236709,Thorncaller Roar,yes
+12.1.x,The Blinding Vale,3200,Ikuzz the Light Hunter,yes,1237090,Bloodthirsty Gaze,no
+12.1.x,The Blinding Vale,3200,Ikuzz the Light Hunter,yes,1237267,Incise,no
+12.1.x,The Blinding Vale,3200,Ikuzz the Light Hunter,yes,1272290,Crunched,no
+12.1.x,The Blinding Vale,3201,Lightwarden Ruia,no,1239825,Lightfire,no
+12.1.x,The Blinding Vale,3201,Lightwarden Ruia,no,1239919,Lightfire Beams,no
+12.1.x,The Blinding Vale,3201,Lightwarden Ruia,no,1241058,Grievous Thrash,no
+12.1.x,The Blinding Vale,3201,Lightwarden Ruia,no,1251345,Blight Resin,no
+12.1.x,The Blinding Vale,3201,Lightwarden Ruia,no,1257094,Pulverized,no
+12.1.x,The Blinding Vale,3202,Ziekket,yes,1246372,Awaken the Lightbloom,yes
+12.1.x,The Blinding Vale,3202,Ziekket,yes,1246858,Lightbloom's Essence,yes
+12.1.x,The Blinding Vale,3202,Ziekket,yes,1246751,Concentrated Lightbeam,no
+12.1.x,The Blinding Vale,3202,Ziekket,yes,1246753,Lightsap,no
+12.1.x,The Blinding Vale,3202,Ziekket,yes,1247746,Thornspike,no
+12.1.x,Voidscar Arena,3285,Taz'rah,yes,1222098,Nether Dash,yes
+12.1.x,Voidscar Arena,3285,Taz'rah,yes,1300259,Dark Bloom,yes
+12.1.x,Voidscar Arena,3285,Taz'rah,yes,1296963,Umbral Rupture,no
+12.1.x,Voidscar Arena,3285,Taz'rah,yes,1297017,Void Blast,no
+12.1.x,Voidscar Arena,3286,Atroxus,yes,1226120,Poison Splash,yes
+12.1.x,Voidscar Arena,3286,Atroxus,yes,1262497,Monstrous Roar,yes
+12.1.x,Voidscar Arena,3286,Atroxus,yes,1222642,Hulking Claw,no
+12.1.x,Voidscar Arena,3286,Atroxus,yes,1222721,Noxious Breath,no
+12.1.x,Voidscar Arena,3286,Atroxus,yes,1222484,Poison Pool,no
+12.1.x,Voidscar Arena,3286,Atroxus,yes,1263971,Lingering Poison,no
+12.1.x,Voidscar Arena,3287,Charonus,yes,1282770,Unstable Singularity,yes
+12.1.x,Voidscar Arena,3287,Charonus,yes,1227264,Cosmic Crash,yes
+12.1.x,Voidscar Arena,3287,Charonus,yes,1263982,Gravitic Orbs,no
+12.1.x,Voidscar Arena,3287,Charonus,yes,1222755,Void Cascade,no
+12.1.x,Voidscar Arena,3287,Charonus,yes,1311923,Dark Waves,no
+12.1.x,Voidscar Arena,3287,Charonus,yes,1264188,Event Horizon,no
+12.1.x,Den of Nalorakk,3207,The Hoardmonger,yes,1235118,Ravenous Bellow,yes
+12.1.x,Den of Nalorakk,3207,The Hoardmonger,yes,1234233,Spoiled Supplies,yes
+12.1.x,Den of Nalorakk,3207,The Hoardmonger,yes,1253268,Earthshatter Slam,no
+12.1.x,Den of Nalorakk,3208,Sentinel of Winter,yes,1235548,Glacial Torment,yes
+12.1.x,Den of Nalorakk,3208,Sentinel of Winter,yes,1235656,Frozen Tempest,yes
+12.1.x,Den of Nalorakk,3208,Sentinel of Winter,yes,1235623,Raging Squall,no
+12.1.x,Den of Nalorakk,3208,Sentinel of Winter,yes,1235783,Shattering Frostspike,no
+12.1.x,Den of Nalorakk,3209,Nalorakk,yes,1242860,Echoing Maul,yes
+12.1.x,Den of Nalorakk,3209,Nalorakk,yes,1243569,Overwhelming Onslaught,yes
+12.1.x,Den of Nalorakk,3209,Nalorakk,yes,1243011,Fury of the War God,yes
+12.1.x,Murder Row,3101,Kystia Manaheart,no,1253811,Fel Spray,no
+12.1.x,Murder Row,3101,Kystia Manaheart,no,474240,Fel Nova,no
+12.1.x,Murder Row,3101,Kystia Manaheart,no,1264095,Mirror Images,no
+12.1.x,Murder Row,3101,Kystia Manaheart,no,1228198,Corroding Spittle,no
+12.1.x,Murder Row,3102,Zaen Bladesorrow,yes,474478,Killing Spree,yes
+12.1.x,Murder Row,3102,Zaen Bladesorrow,yes,1218347,Murder in a Row,yes
+12.1.x,Murder Row,3102,Zaen Bladesorrow,yes,474765,Same-Day Delivery,no
+12.1.x,Murder Row,3102,Zaen Bladesorrow,yes,1214357,Fire Bomb,no
+12.1.x,Murder Row,3102,Zaen Bladesorrow,yes,1222795,Envenom,no
+12.1.x,Murder Row,3103,Xathuux the Annihilator,yes,1214637,Axe Toss,yes
+12.1.x,Murder Row,3103,Xathuux the Annihilator,yes,1295453,Infernal Crush,yes
+12.1.x,Murder Row,3103,Xathuux the Annihilator,yes,474197,Demonic Rage,yes
+12.1.x,Murder Row,3103,Xathuux the Annihilator,yes,473898,Legion Strike,no
+12.1.x,Murder Row,3103,Xathuux the Annihilator,yes,474234,Burning Steps,no
+12.1.x,Murder Row,3103,Xathuux the Annihilator,yes,1214650,Fel Lightning,no
+12.1.x,Murder Row,3105,Lithiel Cinderfury,yes,1218203,Fingers of Gul'dan,yes
+12.1.x,Murder Row,3105,Lithiel Cinderfury,yes,474408,Summon Vilefiend,no
+12.1.x,Murder Row,3105,Lithiel Cinderfury,yes,1224478,Malefic Wave,no
