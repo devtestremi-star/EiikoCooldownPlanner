@@ -25,6 +25,10 @@ local SECTIONS = {
         text  = "New Maximum upcoming spells option: show only the next few cooldowns instead "
              .. "of the whole fight (0 shows all).",
     },
+    {
+        title = "EllesmereUI support",
+        text  = "Anchors for ECP are now available in EUI Edit Mode",
+    },
 }
 
 -- Couleur d'emphase (titre + separateur) : accent de l'addon (violet), repli littéral
