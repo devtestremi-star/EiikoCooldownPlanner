@@ -11,6 +11,8 @@ local function PrintHelp()
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp help" .. HR.COLORS.RESET .. "    - shows this help")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp toggle" .. HR.COLORS.RESET .. "  - enables/disables the addon")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp handshake" .. HR.COLORS.RESET .. " - asks the group who runs ECP, and in which version")
+    HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp stats" .. HR.COLORS.RESET .. "   - asks each group member for their own stats (armor, hp, versatility...)")
+    HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp audit" .. HR.COLORS.RESET .. "   - lists spells still missing a damage / effects entry")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp macros" .. HR.COLORS.RESET .. "  - (re)creates the EHP_ macros (/yell for external CDs)")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp devlog" .. HR.COLORS.RESET .. "  - dev log for debugging (show/on/off/clear)")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp scan" .. HR.COLORS.RESET .. "    - capture zone + encounterID on each pull")
@@ -38,6 +40,19 @@ local dispatch = {
     -- Le code metier ne fait QUE publier l'evenement ; Core/Sync/Listeners.lua prend le relais.
     handshake = function()
         HR.EmitEvent(HR.EV.HANDSHAKE_REQUEST, { reason = "slash" })
+    end,
+
+    -- Collecte des stats du groupe. Meme discipline que handshake : le code metier ne fait
+    -- QUE publier l'evenement, Core/Sync/Listeners.lua prend le relais.
+    stats = function()
+        HR.EmitEvent(HR.EV.STATS_REQUEST, { reason = "slash" })
+    end,
+
+    -- Etat de la saisie du modele de degats : quels sorts n'ont pas encore de chiffres.
+    -- Les deux tables (Data/SpellDamage.lua, Data/SpellEffects.lua) vivent a cote de
+    -- l'existant sans y etre reliees -- sans cette commande, un manque serait silencieux.
+    audit = function()
+        HR.PrintSpellDataAudit()
     end,
 
     whatsnew = function()

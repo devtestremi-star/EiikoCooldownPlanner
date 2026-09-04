@@ -751,10 +751,17 @@ local function groupUnits()
     return u
 end
 
--- Talents ACTIFS du joueur local : set { spellID = true }. Sert a deviner la variante
+-- Talents ACTIFS du joueur local : set { spellID = RANG }. Sert a deviner la variante
 -- de CD (ex. AMZ 3 min talente vs 4 min base). Hors combat/donjon, le loadout de talents
 -- est generalement lisible (a confirmer en jeu ; cf. docs/EiikoCooldownPlanner/external-scan.md). Tout est
 -- garde defensivement : APIs absentes -> set vide -> on retombe sur le defaut.
+--
+-- ⚠️ La valeur est le RANG, pas `true` : un passif de reduction pris 1/2 ou 2/2 ne donne pas
+-- le meme pourcentage, et le modele de degats (Data/SpellEffects.lua, forme `amounts`) a
+-- besoin de les distinguer. Le changement est RETRO-COMPATIBLE : les consommateurs de ce set
+-- (MatchTalentVariant, plus bas) ne testent que la veracite, et un rang >= 1 est vrai en Lua.
+-- Le jumeau `talentSetFromConfig` (chemin INSPECT) garde `true` : aucun de ses appelants n'a
+-- besoin du rang, et le snapshot de stats passe par la fonction locale, pas par lui.
 function HR.GetLocalActiveTalents()
     local set = {}
     if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_Traits) then return set end
@@ -769,7 +776,7 @@ function HR.GetLocalActiveTalents()
                 local entry = C_Traits.GetEntryInfo(cfgID, node.activeEntry.entryID)
                 if entry and entry.definitionID then
                     local def = C_Traits.GetDefinitionInfo(entry.definitionID)
-                    if def and def.spellID then set[def.spellID] = true end
+                    if def and def.spellID then set[def.spellID] = node.activeEntry.rank end
                 end
             end
         end

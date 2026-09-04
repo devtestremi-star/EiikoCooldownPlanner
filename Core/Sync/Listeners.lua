@@ -11,6 +11,7 @@ local addonName, HR = ...
 local Net = HR.Sync.Net
 local Handshake = HR.Sync.Handshake
 local PlanSync = HR.Sync.Plan
+local Stats = HR.Sync.Stats
 
 -- Ce message vient-il de nous ? On recoit ses PROPRES messages addon. Meme test (et
 -- meme limite : un homonyme d'un autre royaume) que Core/Share.lua.
@@ -51,6 +52,10 @@ local function OnNetMessage(p)
         PlanSync.OnPeerOver(p.sender, p.msgId, p.body)
     elseif p.kind == "HELLO_ACK" then
         Handshake.OnAck(p.sender, p.body, p.msgId)
+    elseif p.kind == "STATS?" then
+        Stats.OnRequest(p.sender, p.body, p.msgId)
+    elseif p.kind == "STATS" then
+        Stats.OnReply(p.sender, p.body, p.msgId)
     else
         HR:Debug("[sync] unknown kind", tostring(p.kind), "from", tostring(p.sender))
     end
@@ -79,6 +84,19 @@ local function OnHandshakeRequest(p)
     Handshake.Broadcast(type(p) == "table" and p.reason or nil)
 end
 
+-- Demande de collecte des stats emise par le code metier (/ecp stats).
+local function OnStatsRequest(p)
+    Stats.Broadcast(type(p) == "table" and p.reason or nil)
+end
+
+-- Peremption du snapshot local. Les stats defensives ne sont lisibles que HORS COMBAT
+-- (predicat SecretWhenUnitStatsRestricted) : on ne recalcule donc pas a la demande, on
+-- invalide sur les trois evenements qui peuvent les changer et le prochain Stats.Mine()
+-- refait le travail. Comme tout le reste du canal, l'enregistrement vit ICI.
+local function OnStatsDirty()
+    Stats.Invalidate()
+end
+
 --------------------------------------------------------------------------------
 -- Enregistrements (au chargement du fichier)
 --
@@ -93,3 +111,8 @@ HR.OnEvent(HR.EV.HANDSHAKE_REQUEST, OnHandshakeRequest)
 HR.OnEvent(HR.EV.PLAN_SHARED, OnPlanShared)
 HR.OnEvent(HR.EV.SYNC_START, SendAck("SYNC_START"))
 HR.OnEvent(HR.EV.SYNC_OVER,  SendAck("SYNC_OVER"))
+
+HR.OnEvent(HR.EV.STATS_REQUEST, OnStatsRequest)
+HR:RegisterEvent("PLAYER_REGEN_ENABLED", OnStatsDirty)          -- sortie de combat
+HR:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", OnStatsDirty)
+HR:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", OnStatsDirty)

@@ -1,0 +1,73 @@
+-- EiikoCooldownPlanner - Data/SpellDamage.lua
+-- CE QUE FAIT un sort de boss, en chiffres. Table SEPAREE de Data/Content.lua : celle-ci
+-- porte le TEMPS (firstAt, period, cast, defMarker) et pilote le planner, celle-la porte
+-- les DEGATS et ne sert qu'au modele de survie. Jointure par spellID (ability.spellID),
+-- cote Core/SpellData.lua. Content.lua n'est jamais modifie.
+--
+-- Symetrique de Data/SpellEffects.lua (les defensifs) : meme principe, meme vocabulaire.
+-- Un sort absent d'ici = "inconnu" pour le modele, jamais une casse.
+--
+--------------------------------------------------------------------------------
+-- SCHEMA
+--------------------------------------------------------------------------------
+--   [spellID] = {
+--     -- MONTANTS. La FORME se deduit de ce qui est present :
+--     --   pas de dotAmount        -> coup direct pur
+--     --   pas de initialHitAmount -> DoT pur
+--     --   les deux                -> mixte
+--     initialHitAmount = 1250000,  -- degat a l'application. Coup direct : TOUT est ici.
+--     dotAmount        = 200000,   -- degat d'UN tick (le total se deduit de `ticks`)
+--     ticks            = 5,
+--     tickPeriod       = 2,        -- (s) entre deux ticks
+--     expirationAmount = 800000,   -- certains DoT frappent a l'EXPIRATION
+--
+--     -- NATURE, meme vocabulaire que Data/SpellEffects.lua
+--     subtype = "MAGICAL",         -- "PHYSICAL" | "MAGICAL" | "ALL" | "OTHER"
+--     school  = "SHADOW",          -- "NONE" | "FIRE" | "FROST" | "SHADOW" | ...
+--
+--     -- COMPORTEMENT
+--     ignoreArmor     = false,     -- un sort "physique" de boss ignore souvent l'armure
+--     avoidable       = true,      -- le degat est-il reduit par la stat AVOIDANCE
+--                                  --   (tertiaire, degats AoE) ? cf. note plus bas
+--     piercesImmunity = false,     -- traverse Ice Block & co.
+--     splitDamage     = true,      -- degat PARTAGE entre les joueurs qui le prennent
+--     splitNumber     = 3,         --   en combien de parts (PAS toujours 5)
+--   }
+--
+--------------------------------------------------------------------------------
+-- LES MONTANTS SONT DES VALEURS M0
+--------------------------------------------------------------------------------
+-- On saisit le chiffre de BASE (M0). Le scaling est applique A LA LECTURE par
+-- C_ChallengeMode.GetPowerLevelDamageHealthMod(<cle visee>) -> aucune table de scaling a
+-- maintenir par saison, aucun niveau de reference a memoriser sort par sort.
+-- (A confirmer en jeu : que ce multiplicateur vaut bien 1.0 a M0.)
+--
+--------------------------------------------------------------------------------
+-- `avoidable` FAIT FOI
+--------------------------------------------------------------------------------
+-- C'est la meme information que le tri-etat `aoe` de Data/Content.lua, mais pour le modele
+-- de degats c'est `avoidable` que le moteur lit : la donnee chiffree reste entierement ici,
+-- sans dependre du fichier de contenu. `aoe` reste en place pour l'UI existante (Zephyr,
+-- indicateur "Not Zephyrable"). Les deux peuvent DIVERGER si l'un est edite sans l'autre
+-- -> `/ecp audit` signale les desaccords.
+--
+-- NON RETENUS, volontairement : `mode`/"PCT_MAX_HP" (aucun coup ne tape en % de PV max),
+-- `stackDebuff`, `refKey` (cf. valeurs M0 ci-dessus) et `form` (deduit des montants).
+--
+--------------------------------------------------------------------------------
+-- EXEMPLE (a supprimer quand la saisie reelle commence)
+--------------------------------------------------------------------------------
+--   [465904] = {                                  -- Burning Gale
+--     initialHitAmount = 1250000,
+--     subtype = "MAGICAL", school = "FIRE",
+--     ignoreArmor = false, avoidable = true, piercesImmunity = false,
+--     splitDamage = false,
+--   },
+--
+-- Saisie : les logs et les FORMULES decrites dans les tooltips. Rien n'est mesurable en
+-- jeu -- COMBAT_LOG_EVENT_UNFILTERED est supprime pour les addons depuis 12.0.
+local addonName, HR = ...
+
+-- VIDE : la saisie est un lot a part entiere (cf. damage-model.md, section "Reporte").
+-- `/ecp audit` liste ce qui manque.
+HR.spellDamage = {}

@@ -36,8 +36,17 @@ Data\Content.lua
 Data\Roster.lua
 Data\HealerDefaults.lua
 
+# Modele de degats : deux tables SEPAREES de Defensives.lua / Content.lua, jointes par
+# spellID (cf. Core\SpellData.lua). Data pure, aucune fonction.
+Data\SpellEffects.lua
+Data\SpellDamage.lua
+
 Core\Planner.lua
 Core\Plan2.lua
+
+# Accesseurs des deux tables ci-dessus + /ecp audit. Apres Plan2.lua : la jointure
+# jeton -> spellID s'appuie sur HR.DefKeyOf.
+Core\SpellData.lua
 Core\ShareText.lua
 Core\BossSettings.lua
 Core\Matcher.lua
@@ -70,6 +79,7 @@ Core\Sync\Bus.lua
 Core\Sync\Net.lua
 Core\Sync\Handshake.lua
 Core\Sync\PlanSync.lua
+Core\Sync\Stats.lua
 Core\Sync\Listeners.lua
 
 Core\ForeignBars.lua

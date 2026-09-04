@@ -26,6 +26,9 @@ HR.EV = {
     -- pour START ; "OK" (applique) / "DENIED" (refuse) pour OVER.
     SYNC_START        = "ECP_SYNC_START",         -- "j'ai recu la demande de sync"
     SYNC_OVER         = "ECP_SYNC_OVER",          -- "c'est fini" (applique ou refuse)
+    -- Collecte des stats du groupe (Core/Sync/Stats.lua) : chaque client lit les SIENNES
+    -- (UnitArmor/UnitStat sont "player"-only) et les renvoie a l'emetteur seul.
+    STATS_REQUEST     = "ECP_STATS_REQUEST",      -- emis par le code metier (/ecp stats)
 }
 
 -- handlers[nom] = { fn, ... }

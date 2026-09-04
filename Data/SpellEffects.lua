@@ -1,0 +1,141 @@
+-- EiikoCooldownPlanner - Data/SpellEffects.lua
+-- CE QUE FAIT un defensif ou un buff permanent, en chiffres. Table SEPAREE de
+-- HR.defensives : celle-ci decrit le CD (recharge, classe, talents) et pilote le planner,
+-- celle-la decrit sa PUISSANCE et ne sert qu'au modele de degats. Aucune des deux ne
+-- connait l'autre -- la jointure se fait par spellID, cote Core/SpellData.lua.
+--
+-- Pourquoi separer : HR.defensives est lu par le planner deja publie chez des joueurs.
+-- On n'y touche pas. Un sort absent d'ici = "inconnu" pour le modele, jamais une casse.
+--
+-- Effet de bord voulu : les VARIANTES de talent d'un meme sort ("51052:0" et "51052:1",
+-- "374227" et "374227:heal") pointent le meme spellID -> une seule entree ici.
+--
+-- ATTENTION : SMALL_DEF / EMPTY_BAG sont des PLACEHOLDERS, pas des CD. Ils n'ont pas de
+-- spellID et n'ont pas d'entree ici : hors modele, decide.
+--
+--------------------------------------------------------------------------------
+-- SCHEMA
+--------------------------------------------------------------------------------
+--   [spellID] = {
+--     uptime   = "COOLDOWN" | "PERMANENT" | "PASSIVE",
+--     duration = <s>,                 -- duree de l'EFFET (PAS le cooldown de recharge)
+--     class    = "PRIEST",            -- qui le fournit (surtout pour les PERMANENT)
+--     spec     = "Holy",              -- optionnel, si l'effet est propre a une spe
+--     effects  = { <effet>, ... },    -- un sort peut porter PLUSIEURS effets
+--     variants = { <variante>, ... }, -- optionnel, cf. "TALENTS QUI MODIFIENT UN CD"
+--   }
+--
+-- LES TROIS `uptime`, et comment on sait que le joueur en beneficie :
+--   COOLDOWN   presse par le joueur          -> detecte par le PLACEMENT dans le plan
+--   PERMANENT  buff donne par un autre       -> detecte dans `snapshot.buffs` (auras)
+--   PASSIVE    talent du joueur lui-meme     -> detecte dans `snapshot.talents`
+-- Les trois se detectent dans TROIS LISTES DIFFERENTES : c'est ce qui interdit de fusionner
+-- PERMANENT et PASSIVE. Un talent marque PERMANENT serait cherche parmi les auras et jamais
+-- trouve.
+--
+-- ⚠️ PIEGE, deja corrige dans Core/SpellData.lua : plus de 50 entrees de Data/Defensives.lua
+-- portent `talentReq`, souvent `talentReq = { le sort lui-meme }`. Anti-Magic Zone (51052)
+-- figure donc dans la liste de TALENTS du DK qui l'a prise. Le parcours des talents ne doit
+-- appliquer QUE les entrees `PASSIVE` -- sinon on crediterait 20 % de reduction magique en
+-- permanence au lieu des 10 secondes ou le plan pose le CD. HR.PassiveEffectsFor est le seul
+-- endroit ou cette regle est ecrite : ne pas la redupliquer ailleurs.
+--
+-- Un EFFET :
+--   type      = "DR"              reduction de degats
+--             | "ABSORB"          bouclier : une reserve qui SE VIDE (≠ reduction)
+--             | "HP_MULTIPLIER"   augmente les PV max le temps de l'effet
+--             | "ARMOR_MULTIPLIER" augmente l'armure
+--             | "IMMUNE"          immunite totale (bornee par subtype/school)
+--   subtype   = "PHYSICAL" | "MAGICAL" | "ALL" | "OTHER"
+--   school    = "NONE" | "FIRE" | "FROST" | "SHADOW" | "NATURE" | "ARCANE" | "HOLY"
+--               ("NONE" = pas de restriction plus fine que `subtype`)
+--   amount    = fraction pour DR / HP_MULTIPLIER / ARMOR_MULTIPLIER (0.40, 1.20)
+--               VALEUR absolue pour ABSORB (300000)
+--               OU une FONCTION f(snapshot) -> nombre, pour ce qui scale :
+--                   amount = function(s) return 0.30 * s.hpMax end
+--               (`s` = le snapshot de stats collecte par Core/Sync/Stats.lua)
+--   amounts   = { 0.02, 0.04 }  a la place d'`amount`, pour un talent A PLUSIEURS RANGS :
+--               la valeur retenue est `amounts[rang du talent chez CE joueur]`. Le rang
+--               voyage dans le snapshot (`talentRanks`). Un rang unique -> `amount` scalaire,
+--               qui reste la forme courante.
+--   threshold = plafond en degats EVITES : l'effet s'arrete quand il a empeche N degats.
+--               "reduit de 50% jusqu'a 250k" -> amount = 0.50, threshold = 250000.
+--               Sur un coup de 1M : 250k evites, 750k encaisses. Absent = pas de plafond.
+--   aoeOnly   = true si l'effet ne porte que sur les degats AoE-flaggees (Zephyr).
+--
+-- NON RETENUS, volontairement : `cheatDeath` (Ardent Defender & co. seront annonces
+-- "letal" a tort), `target`/`radius`/`maxTargets` (a 5, on considere tout le monde couvert
+-- en permanence -- faux pour AMZ et Darkness qui sont des flaques au sol), et `stacking`
+-- (les reductions se multiplient entre elles, les boucliers se consomment en sequence :
+-- regle unique, codee dans le moteur plutot que repetee sur chaque entree).
+--
+--------------------------------------------------------------------------------
+-- TALENTS QUI MODIFIENT UN CD
+--------------------------------------------------------------------------------
+-- Cas typique : un talent qui fait passer Shield Wall de 30 % a 40 %.
+--
+-- NE PAS le saisir comme un PASSIVE de 10 %. Ce serait faux deux fois : les reductions se
+-- MULTIPLIENT (30 % puis 10 % font 37 %, pas 40 %), et surtout un PASSIVE s'applique EN
+-- PERMANENCE -- le guerrier gagnerait 10 % de reduction sur toutes les occurrences, y compris
+-- celles ou Shield Wall n'est pas actif.
+--
+-- La variante vit DANS l'entree du sort, departagee par les talents, exactement comme
+-- HR.defensives distingue "51052:0" et "51052:1" (AMZ 3 min / 4 min) :
+--
+--   [871] = {                                     -- Shield Wall
+--     uptime = "COOLDOWN", duration = 8,
+--     effects  = { { type = "DR", subtype = "ALL", school = "NONE", amount = 0.30 } },
+--     variants = {
+--       -- 1re variante dont TOUS les talentReq sont pris et AUCUN talentNot : elle
+--       -- REMPLACE `effects` (elle ne s'y ajoute pas).
+--       { talentReq = { <talentSpellID> },
+--         effects = { { type = "DR", subtype = "ALL", school = "NONE", amount = 0.40 } } },
+--     },
+--   },
+--
+-- Le talent modificateur n'a donc PAS d'entree a lui : la valeur d'un sort reste a un seul
+-- endroit. Resolution : HR.ResolveEffects(spellID, snapshot).
+--
+--------------------------------------------------------------------------------
+-- HORS TABLE, decide
+--------------------------------------------------------------------------------
+-- Les passifs CONDITIONNELS (sous X % de PV, premier coup seulement, pendant un buff) n'ont
+-- pas d'entree du tout -- ni saisis, ni marques. Consequence assumee : rien ne rappellera
+-- qu'ils existent.
+--
+--------------------------------------------------------------------------------
+-- EXEMPLES (a supprimer quand la saisie reelle commence)
+--------------------------------------------------------------------------------
+--   [51052] = {                                   -- Anti-Magic Zone
+--     uptime = "COOLDOWN", duration = 10,
+--     effects = {
+--       { type = "DR", subtype = "MAGICAL", school = "NONE", amount = 0.20 },
+--     },
+--   },
+--   [21562] = {                                   -- Power Word: Fortitude
+--     uptime = "PERMANENT", class = "PRIEST",
+--     effects = {
+--       { type = "HP_MULTIPLIER", amount = 1.05 },
+--     },
+--   },
+--   [115203] = {                                  -- Fortifying Brew : DEUX effets
+--     uptime = "COOLDOWN", duration = 15,
+--     effects = {
+--       { type = "HP_MULTIPLIER", amount = 1.20 },
+--       { type = "DR", subtype = "ALL", school = "NONE", amount = 0.20 },
+--     },
+--   },
+--   [<talentSpellID>] = {                         -- passif de talent a DEUX rangs
+--     uptime = "PASSIVE", class = "DEMONHUNTER", spec = "Vengeance",
+--     effects = {
+--       { type = "DR", subtype = "MAGICAL", school = "NONE", amounts = { 0.02, 0.04 } },
+--     },
+--   },
+--
+-- Saisie : les logs et les FORMULES decrites dans les tooltips. Une formule survit aux
+-- changements d'ilvl et de saison, un releve non.
+local addonName, HR = ...
+
+-- VIDE : la saisie est un lot a part entiere (cf. damage-model.md, section "Reporte").
+-- `/ecp audit` liste ce qui manque.
+HR.spellEffects = {}
