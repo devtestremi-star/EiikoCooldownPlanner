@@ -15,19 +15,9 @@ local UI = HR.UI
 -- A EDITER a chaque version (+ bumper ## Version dans le .toc pour re-declencher).
 local SECTIONS = {
     {
-        title = "Sync your plan to the group",
-        text  = "Push the plan you are playing straight to your party with the new Sync button. "
-             .. "Everyone running the addon gets it imported and set as their active plan. "
-             .. "No click, no duplicate, no re-import required from your group.",
-    },
-    {
-        title = "Personal Timeline & Announcements",
-        text  = "New Maximum upcoming spells option: show only the next few cooldowns instead "
-             .. "of the whole fight (0 shows all).",
-    },
-    {
-        title = "EllesmereUI support",
-        text  = "Anchors for ECP are now available in EUI Edit Mode",
+        title = "Fixes",
+        text  = "Show heal cooldowns now also hides Ramp and healer trinkets instead of "
+             .. "re-labelling them as personal cooldowns.",
     },
 }
 
