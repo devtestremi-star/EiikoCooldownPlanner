@@ -30,6 +30,12 @@ Colors.registry = {
     ["forceHover"]      = { 1, 0.6, 0.15, 1 },
     ["destructiveBg"]   = { 0.55, 0.12, 0.12, 0.75 },
     ["destructiveHover"]= { 0.78, 0.16, 0.16, 0.95 },
+    -- INFORMATION (pas une erreur). Le rouge dit « tu as fait une betise » ; une variante
+    -- de catalogue en lecture seule n'est pas une betise, c'est un etat normal qu'il faut
+    -- juste expliquer. Bleu clair sur fond bleu sombre : le contraste garde le blanc et le
+    -- bleu pale parfaitement lisibles.
+    ["info"]            = { 0.66, 0.83, 1, 1 },
+    ["infoBg"]          = { 0.12, 0.20, 0.34, 0.85 },
 
     -- Neutres (rampe de gris) -------------------------------------------------
     ["black"]           = { 0, 0, 0, 1 },
@@ -84,6 +90,15 @@ end
 function Colors.Unpack(name)
     local c = Colors.Get(name)
     return c[1], c[2], c[3], c[4] or 1
+end
+
+-- Code couleur `|cffRRGGBB` pour l'inline markup d'un FontString. Pendant de
+-- HR.Theme.Hex, mais sur la palette brute (une couleur d'intention, pas un token de theme).
+function Colors.Hex(name)
+    local r, g, b = Colors.Unpack(name)
+    return ("|cff%02x%02x%02x"):format(math.floor(r * 255 + 0.5),
+                                       math.floor(g * 255 + 0.5),
+                                       math.floor(b * 255 + 0.5))
 end
 
 -- Ajoute / remplace une couleur (ou un alias si def est une string).

@@ -218,7 +218,10 @@ local function RenderVariantGroup(content, W, prof, grp, activeId, st)
         local r = AcquireVarRow(content, st.ri)
         r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -st.y); r:SetWidth(W)
         -- Prefixe "DEFAULT" (rouge) devant le nom si c'est la variante auto-chargee de sa spe.
-        local nm = HR.IsDefaultVariant(v.id) and (HR.Theme.Hex("ERROR_COLOR") .. "DEFAULT|r " .. v.name) or v.name
+        -- ⚠️ Le NOM est echappe (il peut venir d'un plan importe : un `|H...|h` s'afficherait
+        -- sinon comme un faux lien cliquable) ; les prefixes sont du markup A NOUS, jamais.
+        local safeName = HR.EscapeMarkup(v.name)
+        local nm = HR.IsDefaultVariant(v.id) and (HR.Theme.Hex("ERROR_COLOR") .. "DEFAULT|r " .. safeName) or safeName
         -- Prefixe "SYNC" (vert) pour un plan POUSSE par un tiers : ce n'est pas l'oeuvre du
         -- joueur, et son contenu sera ecrase a la prochaine poussee de son auteur.
         if v.synced then nm = HR.COLORS.GREEN .. "SYNC|r " .. nm end
@@ -347,6 +350,10 @@ local function fmtCD(cd)
     return cd .. "s"
 end
 
+-- Expose : le libelle de duree du bandeau noir sert aussi a l'addon compagnon (Packager),
+-- qui affiche les memes pastilles de defensif. Une seule mise en forme, pas deux.
+HR.FormatCooldown = fmtCD
+
 local function CreateExtItem(parent)
     local it = CreateFrame("Frame", nil, parent)
     it:SetSize(SPEC_ICON + 2 + EXT_BTN, SPEC_ICON)
@@ -465,6 +472,12 @@ function VariantSummaryIcons(v)
     end
     return items
 end
+
+-- Expose : ces descripteurs (icone de spe, CD du heal, externals repetes par compte) sont
+-- LA definition de « ce que contient une variante » en images. L'addon compagnon en a
+-- besoin pour ses pastilles ; la reecrire chez lui donnerait deux definitions qui
+-- divergeraient au premier changement de compo.
+HR.VariantIconItems = VariantSummaryIcons
 
 
 -- Tooltip CUSTOM du bouton overflow : grille d'ICONES (image + bandeau duree) des sorts
@@ -821,6 +834,18 @@ function UI.BuildHealerSpecs(parent)
         UI.OpenEditVariantModal(cur)
     end })
     p.varEdit:Hide()
+    -- Verrou d'edition : dire POURQUOI. Un bouton grise muet est un bug de conception --
+    -- le joueur ne peut pas deviner que la sortie est "Duplicate". Corps DYNAMIQUE (le
+    -- meme motif que varSync) : la raison depend de la variante affichee a cet instant.
+    -- ⚠️ C'est le TITRE qui commande : s'il rend nil, aucune infobulle ne s'affiche.
+    -- Donc on rend nil quand la variante est editable, et un titre quand elle ne l'est pas.
+    UI.Components.AttachHelpTip(p.varEdit,
+        function() return (HR.CanEditVariant(HR.GetActiveVariant())) and nil or "Read-only plan" end,
+        function()
+            local cur = HR.GetActiveVariant()
+            local _, why = HR.CanEditVariant(cur)
+            return HR.EditBlockedText(why, cur)
+        end)
 
     -- Use : definit la variante SELECTIONNEE comme ACTIVE (jouee en combat, ★).
     p.varUse = UI.Components.TextButton(p, { text = "Use", autoWidth = true, minWidth = 0, padX = 15, padY = 9, onClick = function()
@@ -912,6 +937,24 @@ function UI.BuildHealerSpecs(parent)
     end)
     p.varSync:Hide()
 
+    -- Browse catalogue : ouvre la vue catalogue DEJA REGLEE sur le contexte -- ce donjon, et
+    -- la spe la plus pertinente (la mienne si elle a du contenu ici, sinon la premiere
+    -- disponible : cf. UI.CatalogueDefaultSpec).
+    -- ⚠️ On passe une REQUETE, donc elle ECRASE la recherche en cours. C'est voulu et c'est
+    -- la difference avec l'icone de la barre laterale, qui RESTAURE l'etat precedent : une
+    -- entree contextuelle doit reappliquer son contexte a chaque fois, sinon elle ne sert a
+    -- rien (memo §13.3).
+    p.varBrowse = UI.Components.TextButton(p, { text = "Browse catalogue", autoWidth = true, minWidth = 0, padX = 15, padY = 9, onClick = function()
+        local dID = UI.activeDungeonID
+        if not dID then local d = HR.content and HR.content[UI.selDungeon]; dID = d and d.id end
+        if not dID then return end
+        UI.OpenCatalogue({ dID = dID, spec = UI.CatalogueDefaultSpec(dID) })
+    end })
+    UI.Components.AttachHelpTip(p.varBrowse, "Browse catalogue",
+        "Open the catalogue on this dungeon, filtered on your healing specialization "
+        .. "(or the first one available if nobody published for yours here).")
+    p.varBrowse:Hide()
+
     -- Export / Import : modales a chaine (sous le container des variantes, completement a droite).
     p.varExport = UI.Components.TextButton(p, { text = "Export", autoWidth = true, minWidth = 0, padX = 15, padY = 9, onClick = function() UI.OpenExportModal() end })
     p.varExport:Hide()
@@ -951,7 +994,10 @@ local function RenderVariantControls(p, v)
     p.varTrigger:SetPoint("TOPLEFT", p.varNew, "BOTTOMLEFT", 0, -6)
     p.varTrigger:SetPoint("TOPRIGHT", p.varSetTemplate, "BOTTOMRIGHT", 0, -6)
     -- Prefixe "DEFAULT" (rouge) devant le nom quand la variante affichee est le defaut de sa spe.
-    local trigName = v and ((HR.IsDefaultVariant(v.id, UI.activeDungeonID) and (HR.Theme.Hex("ERROR_COLOR") .. "DEFAULT|r ") or "") .. v.name) or nil
+    -- ⚠️ HR.EscapeMarkup sur le NOM : il peut venir d'un plan importe, donc de n'importe
+    -- qui, et un `|H...|h` s'afficherait ici comme un faux lien cliquable. Le prefixe
+    -- DEFAULT, lui, est du markup A NOUS et ne doit surtout pas etre echappe.
+    local trigName = v and ((HR.IsDefaultVariant(v.id, UI.activeDungeonID) and (HR.Theme.Hex("ERROR_COLOR") .. "DEFAULT|r ") or "") .. HR.EscapeMarkup(v.name)) or nil
     p.varTrigger.label:SetText(v and (VariantRecapMarkup(v, 24) .. "  " .. trigName) or "-")
 
     -- Conteneur Variantes : pleine hauteur, colle a droite, bord gauche = avant le bouton
@@ -967,6 +1013,7 @@ local function RenderVariantControls(p, v)
     p.varExport:ClearAllPoints(); p.varExport:SetPoint("RIGHT", p.varSync, "LEFT", -6, 0)
     p.varImport:ClearAllPoints(); p.varImport:SetPoint("RIGHT", p.varExport, "LEFT", -6, 0)
     p.varReset:ClearAllPoints();  p.varReset:SetPoint("RIGHT", p.varImport, "LEFT", -6, 0)
+    p.varBrowse:ClearAllPoints(); p.varBrowse:SetPoint("RIGHT", p.varReset, "LEFT", -6, 0)
 
     -- Sync : seulement SON PROPRE plan, et seulement s'il y a QUELQU'UN a qui le pousser.
     -- Un plan recu d'un tiers n'est pas re-poussable (il appartient a son auteur) -- le joueur
@@ -981,6 +1028,16 @@ local function RenderVariantControls(p, v)
     local canTpl = CanSetTemplate(v)
     p.varSetTemplate:SetEnabled(canTpl); p.varSetTemplate:SetAlpha(canTpl and 1 or 0.4)
 
+    -- VERROU D'EDITION (HR.CanEditVariant, Core/Plan2.lua) : une variante LIEE -- recue par
+    -- le canal Sync, ou promue depuis un catalogue -- est le reflet du plan de quelqu'un
+    -- d'autre, et une mise a jour de son auteur l'ecraserait. On grise ici pour
+    -- l'AFFORDANCE ; la surete, elle, est assuree au point de mutation (le grisage seul se
+    -- contournerait par l'import texte ou la sync). L'echappatoire est Duplicate, qui reste
+    -- volontairement actif : c'est la sortie.
+    local canEdit = HR.CanEditVariant(v)
+    p.varEdit:SetEnabled(canEdit);  p.varEdit:SetAlpha(canEdit and 1 or 0.4)
+    p.varReset:SetEnabled(canEdit); p.varReset:SetAlpha(canEdit and 1 or 0.4)
+
     -- Default : surligne quand la variante VISIBLE est le defaut auto-charge de sa spe.
     -- Actif seulement si la variante est de MA spe (set) OU deja le defaut (retrait permis).
     local isDef  = v and HR.IsDefaultVariant(v.id, UI.activeDungeonID) or false
@@ -990,6 +1047,10 @@ local function RenderVariantControls(p, v)
 
     p.varTrigger:Show(); p.varNew:Show(); p.varDup:Show(); p.varEdit:Show()
     p.varUse:Show(); p.varDefault:Show(); p.varSetTemplate:Show(); p.varSync:Show(); p.varExport:Show(); p.varImport:Show(); p.varReset:Show()
+    -- Masque tant qu'aucun pack n'a ete importe : la feature se deverrouille au premier
+    -- import. Rederive a chaque rendu, jamais memorise. Il est le plus a GAUCHE, donc son
+    -- absence ne laisse aucun trou.
+    p.varBrowse:SetShown((HR.Catalog and HR.Catalog.HasContent()) and true or false)
     p.varNew:SetSelected(false)   -- au repos hors etat vide (voir RenderEmptyVariantControls)
 end
 
@@ -999,6 +1060,7 @@ end
 local function RenderEmptyVariantControls(p)
     p.varTrigger:Hide(); p.varDup:Hide(); p.varEdit:Hide(); p.varUse:Hide()
     p.varDefault:Hide(); p.varSetTemplate:Hide(); p.varSync:Hide(); p.varExport:Hide(); p.varReset:Hide()
+    p.varBrowse:Hide()          -- « depuis une variante » : sans variante, New + Import suffisent
     p.variantBox:Hide()
 
     p.varNew:ClearAllPoints();    p.varNew:SetPoint("TOPRIGHT", p, "TOPRIGHT", -PADX, -PADY); p.varNew:Show()
@@ -1505,18 +1567,27 @@ local function BuildExportModal()
     UI.exportModal = m
 end
 
-function UI.OpenExportModal()
-    local cur = HR.GetActiveVariant()
-    if not cur then HR:Print("No variant to export."); return end
+-- Affiche une chaine exportable dans la modale de copie (selection auto + Ctrl+C auto-fermant).
+-- EXTRAITE de UI.OpenExportModal pour que d'autres exports -- le plan d'un seul boss depuis
+-- l'apercu de catalogue (memo §14) -- la reutilisent sans redupliquer la mecanique d'autocopie.
+-- Le titre est PARAMETRABLE : « Export variant » serait faux sur un plan de boss.
+function UI.ShowExportString(str, title)
     if not UI.exportModal then BuildExportModal() end
     local m = UI.exportModal
-    local dID = UI.activeDungeonID
-    if not dID then local d = HR.content and HR.content[UI.selDungeon]; dID = d and d.id end
-    local str = (HR.Share and HR.Share.EncodeVariant) and HR.Share.EncodeVariant(dID, cur) or nil
+    if title and m.title then m.title:SetText(title) end
     m.exportStr = str or ""
     m.edit:SetText(str or "<export failed: encoding unavailable or no dungeon>")
     m:Show(); m:Raise()
     m.SelectAll()                                      -- focus + selection -> Ctrl+C immediat
+end
+
+function UI.OpenExportModal()
+    local cur = HR.GetActiveVariant()
+    if not cur then HR:Print("No variant to export."); return end
+    local dID = UI.activeDungeonID
+    if not dID then local d = HR.content and HR.content[UI.selDungeon]; dID = d and d.id end
+    local str = (HR.Share and HR.Share.EncodeVariant) and HR.Share.EncodeVariant(dID, cur) or nil
+    UI.ShowExportString(str, "Export variant")
     if not str then HR:Print("Export failed (encoding unavailable or no dungeon selected).") end
 end
 
@@ -1528,17 +1599,51 @@ end
 
 function UI.ImportVariantString(str)
     str = str and strtrim(str) or ""
+
+    -- ⚠️ ORDRE CRITIQUE : le CATALOGUE se teste AVANT le format texte. Les deux commencent
+    -- par « ecp; », et `ShareText.Looks` repondrait donc oui a un catalogue -- qui partirait
+    -- alors dans le parseur du format texte et ressortirait avec « exported by a newer
+    -- version of the addon ». Message juste pour un client d'AVANT le catalogue, faux pour
+    -- celui-ci : c'est precisement le mecanisme de compatibilite du memo §6.1, et il ne
+    -- doit se declencher que chez ceux qui ne savent pas lire les catalogues.
+    if HR.Catalog and HR.Catalog.Looks(str) then
+        return UI.ImportCatalogueString(str)
+    end
+
     -- Format texte externe (`ecp;2`, nu ou en enveloppe `ecp64:`) => chemin dedie, qui
     -- gere les DEUX cas (boss unique / donjon complet) et ses propres ecrans.
     -- Aiguillage non ambigu : l'alphabet Base64 du format natif ne contient pas de ';'.
     if HR.ShareText and HR.ShareText.Looks(str) then
         return UI.ImportTextPlan(str)
     end
-    if not (HR.Share and HR.Share.DecodeVariant) then
+    if not (HR.Share and HR.Share.DecodeRaw) then
         HR:Print("Import unavailable (encoding library missing)."); return false
     end
-    local payload = HR.Share.DecodeVariant(str)
-    if not payload then HR:Print("Import failed: invalid or corrupted string."); return false end
+    -- Une chaine de PROFIL passe le meme pipeline Base64 et arriverait ici comme "corrompue",
+    -- ce qui enverrait chercher le probleme dans la chaine plutot que dans le bouton employe.
+    -- On decode donc une fois, on reconnait, et on renvoie vers le bon canal.
+    local payload = HR.Share.DecodeRaw(str)
+    if type(payload) == "table" and payload.kind == "profile" then
+        HR:Print("This is a display PROFILE, not a plan. Import it from Settings > Profiles.")
+        return false
+    end
+    if not HR.Share.ValidatePayload(payload) then
+        HR:Print("Import failed: invalid or corrupted string."); return false
+    end
+    -- Plan d'UN SEUL boss (memo §14) : MEME format, plus un drapeau. Route dediee, qui n'ecrit
+    -- PAS de variante -- elle ecrase un boss dans celle que le joueur a sous les yeux.
+    -- ⚠️ Le drapeau se lit ICI, AVANT ImportPayload : apres, la variante serait deja creee.
+    if payload.bossOnly ~= nil and UI.ImportNativeBossPlan then
+        return UI.ImportNativeBossPlan(payload)
+    end
+    return UI.ImportNativeVariant(payload)
+end
+
+-- Import d'une VARIANTE entiere depuis un payload natif deja decode et VALIDE.
+-- Extraite de UI.ImportVariantString, qui ne fait plus que repartir : elle implementait une
+-- des routes pendant que les autres etaient des appels d'une ligne, et y greffer la branche
+-- boss en aurait fait l'implementeur de DEUX routes.
+function UI.ImportNativeVariant(payload)
     local v, dID = HR.Share.ImportPayload(payload, nil)
     if not v then HR:Print("Import failed: invalid plan."); return false end
     -- Aller sur le donjon de la variante (si different) puis la SELECTIONNER comme EDITEE.

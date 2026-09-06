@@ -789,6 +789,61 @@ function ContainerMixin:SetPadding(x, y)
     self:_InsetContent()
 end
 
+--------------------------------------------------------------------------------
+-- 5b. ModalBackground — fond d'image + voile sombre d'une modale.
+--     C.ModalBackground(window, { key = "bg-variant", dim = 0.7 })
+--
+--     Recette extraite : elle etait recopiee a l'IDENTIQUE dans cinq modales
+--     (HealerSpecs : New/Duplicate/Export/Import ; SyncFrame : la demande d'accord), et
+--     l'addon compagnon en aurait fait deux copies de plus. Trois choses y sont faciles
+--     a rater, d'ou l'extraction :
+--       * le cadrage « cover » : sans lui, l'image est ETIREE aux proportions de la
+--         fenetre. Il se recalcule au redimensionnement, pas seulement a la creation ;
+--       * le VOILE sombre par-dessus, sans lequel le texte devient illisible ;
+--       * le sous-niveau BACKGROUND 3 : au-dessus de l'image (niveau 2 pose par C.Window)
+--         mais sous tout le contenu.
+--
+--     ⚠️ A appeler APRES C.Window et seulement si `bgTexture` lui a ete passe : c'est lui
+--     qui cree `f.bgTex`. Sans image, il n'y a rien a cadrer ni a voiler -> no-op.
+--------------------------------------------------------------------------------
+function C.ModalBackground(f, opts)
+    opts = opts or {}
+    if not f or not f.bgTex then return f end
+
+    -- Cadrage « cover » : on rogne l'axe le plus long pour remplir sans deformer.
+    local function Layout()
+        local w, h = f:GetWidth(), f:GetHeight()
+        if not w or not h or w <= 0 or h <= 0 then return end   -- rect pas encore resolu
+        local af = w / h
+        if af >= 1 then
+            local dv = 1 / af
+            f.bgTex:SetTexCoord(0, 1, (1 - dv) / 2, (1 + dv) / 2)
+        else
+            local du = af
+            f.bgTex:SetTexCoord((1 - du) / 2, (1 + du) / 2, 0, 1)
+        end
+    end
+    f:HookScript("OnSizeChanged", Layout)
+    Layout()
+
+    if not f.bgDim then
+        f.bgDim = f:CreateTexture(nil, "BACKGROUND", nil, 3)
+        f.bgDim:SetAllPoints()
+    end
+    f.bgDim:SetColorTexture(0, 0, 0, opts.dim or 0.7)
+    return f
+end
+
+-- Texture de fond de modale par defaut, ou nil si l'asset manque (une modale sans fond
+-- reste parfaitement utilisable -- on ne pose jamais une texture vide).
+function C.ModalBackgroundTexture(key)
+    key = key or "bg-variant"
+    if HR.Assets and HR.Assets.registry and HR.Assets.registry[key] then
+        return HR.Asset(key)
+    end
+    return nil
+end
+
 function C.Container(parent, opts)
     opts = opts or {}
     local f = CreateFrame("Frame", opts.name, parent)
@@ -1088,4 +1143,90 @@ function C.Chip(parent, opts)
     f._maxW = opts.maxWidth
     f:SetText(opts.text)
     return f
+end
+
+--------------------------------------------------------------------------------
+-- C.StringBox(parent, opts) -- zone de CHAINE longue (export/import).
+--
+-- WoW n'expose aucune API de presse-papier : le seul echange possible est une EditBox
+-- que le joueur copie lui-meme. Ce composant en fait un widget unique, avec ses deux
+-- modes, plutot que de laisser chaque modale re-inventer le meme scroll + EditBox.
+--
+--   opts.readOnly  -- EXPORT : la chaine se re-ecrit a toute saisie (elle ne peut pas etre
+--                     alteree), le focus est pris a l'affichage et tout est selectionne,
+--                     de sorte qu'un Ctrl+C immediat copie l'integralite.
+--   opts.onCopy    -- appele juste APRES un Ctrl+C / Ctrl+X (mode readOnly). Sert a fermer
+--                     la fenetre : on ne peut pas OBSERVER la copie, seulement la touche.
+--   opts.onEscape  -- Echap dans la zone (typiquement : fermer la modale).
+--
+-- L'instance est la ScrollFrame, augmentee de SetString / GetString / SelectAll.
+-- (La modale Export/Import de variante -- UI/HealerSpecs.lua -- porte encore sa propre
+--  copie de ce code, anterieure. Elle marche : on ne la reecrit pas au passage.)
+--------------------------------------------------------------------------------
+function C.StringBox(parent, opts)
+    opts = opts or {}
+    local scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
+    scroll.bg = scroll:CreateTexture(nil, "BACKGROUND")
+    scroll.bg:SetAllPoints()
+    scroll.bg:SetColorTexture(0, 0, 0, 0.5)
+
+    local edit = CreateFrame("EditBox", nil, scroll)
+    edit:SetMultiLine(true)
+    edit:SetFontObject(ChatFontNormal)
+    edit:SetAutoFocus(opts.readOnly and true or false)
+    edit:SetWidth(opts.width or 496)
+    edit:SetTextInsets(4, 4, 4, 4)
+    edit:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+        if opts.onEscape then opts.onEscape() end
+    end)
+    scroll:SetScrollChild(edit)
+    scroll.edit = edit
+
+    if opts.readOnly then
+        -- Selection totale a chaque prise de focus (auto ou clic) -> Ctrl+C copie tout.
+        edit:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        -- Read-only par RESTAURATION plutot que par :Disable() : une EditBox desactivee
+        -- ne se selectionne plus, donc ne se copie plus.
+        edit:SetScript("OnTextChanged", function(self, userInput)
+            if userInput then self:SetText(scroll._str or "") end
+        end)
+        -- "AUTOCOPY" facon SimulationCraft : on ne peut pas savoir que l'OS a copie, on
+        -- DETECTE la combinaison. La grace de 0.2 s couvre le Ctrl relache avant le C.
+        local ctrlDown = false
+        edit:SetScript("OnKeyDown", function(_, key)
+            if key == "LCTRL" or key == "RCTRL" or key == "LMETA" or key == "RMETA" then
+                ctrlDown = true
+            end
+        end)
+        edit:SetScript("OnKeyUp", function(_, key)
+            if key == "LCTRL" or key == "RCTRL" or key == "LMETA" or key == "RMETA" then
+                C_Timer.After(0.2, function() ctrlDown = false end)
+            end
+            if ctrlDown and (key == "C" or key == "X") and opts.onCopy then
+                C_Timer.After(0.1, opts.onCopy)                  -- APRES la copie de l'OS
+            end
+        end)
+    end
+
+    function scroll:SetString(str)
+        self._str = str or ""
+        self.edit:SetText(self._str)
+    end
+
+    function scroll:GetString()
+        return self.edit:GetText() or ""
+    end
+
+    -- Cale la largeur sur le scroll (connue seulement une fois la fenetre posee) puis
+    -- prend le focus. Le repli a la frame suivante rend l'ouverture robuste au timing.
+    function scroll:SelectAll()
+        self.edit:SetWidth(self:GetWidth() or opts.width or 496)
+        self.edit:SetFocus()
+        C_Timer.After(0, function()
+            if self:IsShown() then self.edit:SetFocus() end
+        end)
+    end
+
+    return scroll
 end

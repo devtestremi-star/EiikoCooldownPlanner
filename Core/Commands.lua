@@ -12,6 +12,7 @@ local function PrintHelp()
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp toggle" .. HR.COLORS.RESET .. "  - enables/disables the addon")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp handshake" .. HR.COLORS.RESET .. " - asks the group who runs ECP, and in which version")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp macros" .. HR.COLORS.RESET .. "  - (re)creates the EHP_ macros (/yell for external CDs)")
+    HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp catalog" .. HR.COLORS.RESET .. " - what the catalogue holds (reset: empties it, test tool)")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp devlog" .. HR.COLORS.RESET .. "  - dev log for debugging (show/on/off/clear)")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp scan" .. HR.COLORS.RESET .. "    - capture zone + encounterID on each pull")
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp gather" .. HR.COLORS.RESET .. "  - print each server timeline event live (on/off/status)")
@@ -42,6 +43,45 @@ local dispatch = {
 
     whatsnew = function()
         if HR.UI and HR.UI.ShowWhatsNew then HR.UI.ShowWhatsNew() end
+    end,
+
+    -- OUTIL DE TEST. `status` = ce que contient le catalogue ; `reset` = on le vide.
+    --
+    -- ⚠️ `reset` ecrit dans la DB, ce que l'addon ne fait presque jamais -- d'ou la portee
+    -- etroite et le rappel a l'ecran : SEULE `db2.catalog` est videe. Les variantes deja
+    -- promues restent, en lecture seule, et deviennent orphelines (memo §10.9). C'est
+    -- justement le moyen le plus simple d'exercer ce chemin, et de re-tester le
+    -- deverrouillage de la feature au premier import.
+    catalog = function(rest)
+        rest = rest and rest:lower() or ""
+        local Cat = HR.Catalog
+        if not Cat then HR:Print("Catalogue module missing."); return end
+        if rest == "reset" then
+            Cat.Reset()
+            -- ⚠️ Garde sur UI.frame, PAS sur UI.RefreshRows : celle-ci est definie au
+            -- chargement du fichier, mais les tables qu'elle parcourt (UI.rows...) ne
+            -- naissent qu'au premier Build(). Sans fenetre jamais ouverte, l'appel plantait
+            -- sur `ipairs(nil)`. Rien a redessiner de toute facon.
+            if HR.UI and HR.UI.frame and HR.UI.RefreshRows then HR.UI.RefreshRows() end
+            HR:Print("Catalogue emptied. " .. HR.COLORS.YELLOW
+                .. "Plans you already added were NOT removed" .. HR.COLORS.RESET
+                .. " -- they stay read-only and simply stop receiving updates.")
+            return
+        end
+        local s = Cat.Store()
+        local packs, entries = 0, 0
+        for _, p in pairs((s and s.packs) or {}) do
+            packs = packs + 1
+            entries = entries + #(p.entries or {})
+        end
+        local creators = 0
+        for _ in pairs((s and s.creators) or {}) do creators = creators + 1 end
+        HR:Print(("Catalogue: %d creator(s), %d pack(s), %d entr%s. Access is %s.")
+            :format(creators, packs, entries, entries == 1 and "y" or "ies",
+                    Cat.HasContent() and (HR.COLORS.GREEN .. "unlocked" .. HR.COLORS.RESET)
+                                      or (HR.COLORS.RED .. "hidden" .. HR.COLORS.RESET)))
+        HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp catalog reset" .. HR.COLORS.RESET
+            .. " - empties the catalogue (test tool; your added plans are kept)")
     end,
 
     macros = function()

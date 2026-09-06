@@ -2,22 +2,17 @@
 ## Title: EiikoCooldownPlannerDev - ECP
 ## Notes: Plan healer defensive cooldowns against boss abilities
 ## Author: Eiiko
-## Version: 1.1.1
+## Version: 1.2.1
 ## IconTexture: Interface\AddOns\EiikoCooldownPlannerDev\Media\icon
 ## SavedVariables: HealPlannerDB, ECPlannerDB, ECPDevLog, ECPDevScan
 ## SavedVariablesPerCharacter: HealPlannerCharDB
 ## AddonCompartmentFunc: HealPlanner_OnAddonCompartmentClick
 ## AllowAddOnTableAccess: 1
-# EllesmereUI : optionnel, mais s'il est la il doit charger AVANT nous -- sinon la globale
-# EllesmereUI n'existe pas encore quand Core/EditMode.lua s'enregistre (cf. SKINNING_API.md).
 ## OptionalDeps: EllesmereUI
 ## Category: Mythic+
 ## X-Curse-Project-ID:
 ## X-Wago-ID:
 
-# Librairies embarquees (publiques) : glow des sorts dans timeline/upcoming (UI non-securisee),
-# et echange des cles M+ du groupe (LibKeystone v11 VERBATIM, aussi embarquee par BigWigs/DBM
-# -> LibStub dedoublonne ; ne PAS la modifier localement, les mises a jour sont du drop-in).
 Libs\LibStub\LibStub.lua
 Libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
 Libs\LibKeystone\LibKeystone.lua
@@ -36,8 +31,11 @@ Data\Content.lua
 Data\Roster.lua
 Data\HealerDefaults.lua
 
+Core\Icons.lua
+
 Core\Planner.lua
 Core\Plan2.lua
+Core\Validate.lua
 Core\ShareText.lua
 Core\BossSettings.lua
 Core\Matcher.lua
@@ -48,8 +46,13 @@ UI\ConfigFrame.lua
 UI\HomePage.lua
 UI\HealerSpecs.lua
 UI\ImportText.lua
+UI\ImportBoss.lua
+UI\CatalogImport.lua
+UI\CatalogFrame.lua
+UI\CatalogPreview.lua
 UI\PlanTimeline.lua
 UI\SyncFrame.lua
+UI\ProfileShare.lua
 UI\WhatsNew.lua
 UI\PrerunReminder.lua
 
@@ -62,10 +65,10 @@ Core\Capture.lua
 Core\Macros.lua
 Core\Share.lua
 
-# Canal de SYNCHRO (prefixe ECPSync) : bus d'evenements interne + transport.
-# Listeners.lua est le SEUL site d'enregistrement de listeners ; le code metier
-# ne fait que HR.EmitEvent(HR.EV.*, payload). Ordre impose : Bus avant Net avant
-# Handshake avant Listeners (et tout apres Core\Events.lua, qui definit RegisterEvent).
+Core\ProfileShare.lua
+
+Core\Catalog.lua
+
 Core\Sync\Bus.lua
 Core\Sync\Net.lua
 Core\Sync\Handshake.lua
@@ -74,9 +77,6 @@ Core\Sync\Listeners.lua
 
 Core\ForeignBars.lua
 
-# Rattachement de nos cadres HUD a l'unlock mode d'EllesmereUI (no-op sans EllesmereUI).
-# A cote de ForeignBars : meme nature (integration d'un addon tiers), memes regles. Tout ce
-# qu'il touche (HR.UI.*, HR.Runtime.*) est resolu PARESSEUSEMENT -> pas de contrainte d'ordre.
 Core\EditMode.lua
 
 UI\RuntimeBox.lua
@@ -86,8 +86,8 @@ UI\ProgressBars.lua
 
 Core\TTS.lua
 
-# Raccourci clavier d'ouverture (Bindings.xml est charge tout seul depuis la RACINE de
-# l'addon : il ne se liste PAS ici). Apres Core\Events.lua, qui definit HR:RegisterEvent.
 Core\Keybind.lua
+
+Core\Bridge.lua
 
 Core\Commands.lua

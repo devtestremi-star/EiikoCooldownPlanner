@@ -755,7 +755,9 @@ end
 -- Confirmation CUSTOM de suppression d'un profil (fenetre maison, pas de StaticPopup).
 local function ConfirmDeleteProfile(name)
     if not UI.profileConfirm then
-        local m = UI.Components.Window(UIParent, { name = "ECPProfileConfirm", title = "Delete profile", width = 380, height = 170 })
+        local m = UI.Components.Window(UIParent, { name = "ECPProfileConfirm", title = "Delete profile",
+            width = 380, height = 170, bgTexture = UI.Components.ModalBackgroundTexture() })
+        UI.Components.ModalBackground(m)   -- cadrage "cover" + voile : sans bgTexture, elle n'a rien a poser
         m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
         tinsert(UISpecialFrames, "ECPProfileConfirm")
         local c = m.content
@@ -781,7 +783,9 @@ end
 -- Modale CUSTOM "New profile" : texte explicatif + select du profil SOURCE + nom prerempli
 -- (Joueur-Royaume-Spe) + CTA Cancel/Create. Le nouveau profil copie les valeurs de la source.
 local function BuildProfileNewModal()
-    local m = UI.Components.Window(UIParent, { name = "ECPProfileNewModal", title = "New profile", width = 460, height = 290 })
+    local m = UI.Components.Window(UIParent, { name = "ECPProfileNewModal", title = "New profile",
+        width = 460, height = 290, bgTexture = UI.Components.ModalBackgroundTexture() })
+    UI.Components.ModalBackground(m)       -- idem : les deux vont ensemble
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
     tinsert(UISpecialFrames, "ECPProfileNewModal")
     local c = m.content
@@ -875,6 +879,18 @@ local function BuildProfileTab(panel)
     local newBtn = UI.Components.TextButton(panel, { text = "New profile", autoWidth = true, padX = 14, padY = 6,
         onClick = function() UI.OpenProfileNewModal() end })
     newBtn:SetPoint("TOPLEFT", cl, "BOTTOMLEFT", 0, -24)
+
+    -- Export / Import d'un profil (chaines copiables, cf. UI/ProfileShare.lua). CANAL A PART
+    -- de l'import de donjon/variante du panneau Healer specs : une chaine de profil ne decrit
+    -- aucun plan, et les deux entrees se renvoient l'une a l'autre plutot que de se tromper.
+    -- Les deux Open* sont resolus AU CLIC (UI/ProfileShare.lua charge apres ce fichier).
+    local expBtn = UI.Components.TextButton(panel, { text = "Export", autoWidth = true, padX = 14, padY = 6,
+        onClick = function() UI.OpenProfileExportModal() end })
+    expBtn:SetPoint("LEFT", newBtn, "RIGHT", 8, 0)
+
+    local impBtn = UI.Components.TextButton(panel, { text = "Import", autoWidth = true, padX = 14, padY = 6,
+        onClick = function() UI.OpenProfileImportModal() end })
+    impBtn:SetPoint("LEFT", expBtn, "RIGHT", 8, 0)
 end
 
 -- Rafraichit le libelle du select de profil (apres suppression sans reload).
@@ -1236,11 +1252,40 @@ local function WideLayout()
     UI.scroll:SetPoint("BOTTOMRIGHT", UI.body, "BOTTOMRIGHT", -34, 16)
 end
 
--- Surbrillance des boutons de vue selon le mode actif (liseré doré, comme un onglet).
+-- Reconcilie la barre laterale avec l'etat COURANT. Tout y est DERIVE, rien n'est memorise :
+-- la surbrillance se deduit de `UI.viewMode`, l'acces au catalogue de ce que la table du
+-- catalogue contient a cet instant.
+--
+-- ⚠️ Il n'existe volontairement AUCUN « UpdateCatalogAccess » a notifier apres un import ou
+-- un reset. Un rendu qu'il faut penser a invalider est le meme piege qu'un etat stocke, en
+-- moins visible : le jour ou une nouvelle voie modifie le catalogue, on oublie l'appel et la
+-- barre ment. Ici on recalcule a chaque redessin, et `UI.RefreshRows` (le redessin general de
+-- l'addon) nous appelle -- donc « redessiner » suffit, personne n'a a prevenir de quoi.
 function UI.UpdateViewButtons()
     if not UI.viewButtons then return end
     for _, b in ipairs(UI.viewButtons) do
         if b.mode then b:SetSelected(UI.viewMode == b.mode) end
+    end
+
+    -- DEVERROUILLAGE du catalogue : tant que rien n'a ete importe, l'icone n'existe pas.
+    -- Une entree de menu qui ouvre un ecran vide n'explique rien -- elle donne juste
+    -- l'impression que la feature est cassee. Le premier import de pack l'ouvre.
+    local c = UI.catalogSlot
+    if not (c and c.btn) then return end
+    local show = (HR.Catalog and HR.Catalog.HasContent()) and true or false
+    c.btn:SetShown(show)
+    -- Le creneau se REFERME : tout ce qui suit remonte d'un cran. La barre est posee a
+    -- offsets ABSOLUS depuis le haut, donc rien ne suit tout seul -- on repose chaque
+    -- element depuis son ordonnee de base.
+    local d = show and 0 or c.slot
+    for _, it in ipairs(c.after) do
+        it.f:ClearAllPoints()
+        if it.wide then      -- separateur : ancre sur les deux bords
+            it.f:SetPoint("TOPLEFT",  UI.sidebar, "TOPLEFT",   8, -(it.y - d))
+            it.f:SetPoint("TOPRIGHT", UI.sidebar, "TOPRIGHT", -8, -(it.y - d))
+        else
+            it.f:SetPoint("TOP", UI.sidebar, "TOP", 0, -(it.y - d))
+        end
     end
 end
 
@@ -1509,6 +1554,9 @@ function UI.ShowPlanMessage(text, centered)
 end
 
 function UI.RefreshRows()
+    -- La barre laterale se reconcilie avec le redessin general, et pas sur notification :
+    -- l'acces au catalogue en depend, et personne n'a ainsi a prevenir qu'il a change.
+    UI.UpdateViewButtons()
     -- Cacher tous les enfants de la liste avant de choisir le mode d'affichage.
     for _, r in ipairs(UI.rows) do r:Hide() end
     for _, t in ipairs(UI.trashRows) do t:Hide() end
@@ -1522,6 +1570,8 @@ function UI.RefreshRows()
     if UI.homeBar then UI.homeBar:Hide() end
     if UI.homePanel then UI.homePanel:Hide() end
     if UI.bossSettingsPanel then UI.bossSettingsPanel:Hide() end
+    if UI.catalogBar then UI.catalogBar:Hide() end
+    if UI.catalogPanel then UI.catalogPanel:Hide() end
     if UI.planTimeline then UI.planTimeline:Hide() end
     if UI.specsPanel then UI.specsPanel:Hide() end
     if UI.CloseVariantPopup then UI.CloseVariantPopup() end
@@ -1555,6 +1605,15 @@ function UI.RefreshRows()
         if UI.contentBg then UI.contentBg:Show() end
         if UI.contentDim then UI.contentDim:Show() end
         UI.RenderOptions()
+        return
+    elseif UI.viewMode == "catalog" then
+        -- Vue CATALOGUE : recherche dans les packs recus (cf. UI/CatalogFrame.lua).
+        UI.bossTitle:SetText("")
+        if UI.scroll then UI.scroll:Hide() end
+        UI.UpdateContentBg()
+        if UI.contentBg then UI.contentBg:Show() end
+        if UI.contentDim then UI.contentDim:Show() end
+        UI.RenderCatalog()
         return
     elseif UI.viewMode == "faq" then
         -- Vue FAQ (section dediee) : MEME fond que Settings (bg-settings) mais SANS la
@@ -2030,11 +2089,70 @@ local function Build()
         end
     end
 
-    -- Outils : Options (roue) + FAQ, sous le separateur. Icones custom, SANS texte.
+    -- Outils, sous le separateur des donjons. Icones custom, SANS texte.
     -- (StyleToolButton et UI.viewButtons sont definis plus haut : le bouton Home, en tete
     -- de sidebar, est le premier a s'en servir.)
     -- Onglet "Defs" (liste des defensifs) : bouton RETIRE de la barre d'outils, et le code
     -- de la vue "deflist" a ete supprime le 2026-08-26 (il n'etait plus atteignable).
+    --
+    -- ORDRE : donjons | Catalogue + Import | Settings. Les deux outils de PLAN (en trouver
+    -- un, en coller un) sont voisins ; le divider qui suit les separe des Settings, qui ne
+    -- parlent que d'affichage. Il marque une difference de NATURE, pas une hierarchie.
+
+    -- FAQ : masquee (contenu jamais ecrit -- la vue n'affiche que "coming soon"). Le mode
+    -- "faq" reste gere partout ailleurs (RefreshRows, UpdateContentBg) : remettre ce drapeau
+    -- a `true` suffit a la faire revenir, rien d'autre n'a ete retire.
+    local SHOW_FAQ = false
+
+    -- CATALOGUE (memo §13.5) : chercher un plan de la communaute pour un donjon. C'est une
+    -- VUE (elle porte `.mode` et entre dans viewButtons), contrairement au bouton Import
+    -- juste dessous, qui n'est qu'une action.
+    local catBtn = NavButton({
+        image   = HR.Asset("icon-catalog"),
+        size    = NAV_ICON,
+        onClick = function() UI.OpenCatalogue() end,
+    }, "Catalogue")
+    catBtn.mode = "catalog"
+    StyleToolButton(catBtn)
+    catBtn:SetPoint("TOP", UI.sidebar, "TOP", 0, -sy)
+    UI.viewButtons[#UI.viewButtons + 1] = catBtn
+    sy = sy + NAV_ICON + NAV_GAP
+
+    -- DEVERROUILLAGE : tant qu'aucun pack n'a ete importe, ce bouton est MASQUE et son
+    -- creneau se referme -- les elements qui suivent remontent d'un cran. On memorise donc
+    -- leur ordonnee de BASE : la barre est posee a offsets absolus depuis le haut, il n'y a
+    -- pas de chainage a suivre tout seul. Cf. UI.UpdateViewButtons, qui rederive tout ca.
+    UI.catalogSlot = { btn = catBtn, slot = NAV_ICON + NAV_GAP, after = {} }
+    local function AfterCatalog(f, y, wide)
+        UI.catalogSlot.after[#UI.catalogSlot.after + 1] = { f = f, y = y, wide = wide }
+    end
+
+    -- IMPORT, colle au Catalogue. Il etait jusqu'ici enfoui dans le bandeau de variantes, ce
+    -- qui obligeait a ouvrir un donjon pour importer -- alors que l'import n'en depend pas :
+    -- le donjon cible vient du PAYLOAD, et UI.ImportVariantString y navigue elle-meme.
+    --
+    -- ⚠️ PAS de `.mode`, et PAS dans `UI.viewButtons` : ce n'est pas une vue mais une
+    -- ACTION. L'y mettre lui donnerait un etat « selectionne » qui ne correspond a rien,
+    -- et UI.UpdateViewButtons le rallumerait/eteindrait au gre des changements de vue.
+    local importBtn = NavButton({
+        image   = HR.Asset("icon-import"),
+        size    = NAV_ICON,
+        onClick = function() UI.OpenImportModal() end,
+    }, "Import a plan or a catalogue")
+    StyleToolButton(importBtn)
+    importBtn:SetPoint("TOP", UI.sidebar, "TOP", 0, -sy)
+    AfterCatalog(importBtn, sy)
+    sy = sy + NAV_ICON + NAV_GAP
+
+    -- Separateur : outils de plan au-dessus, reglages d'affichage en dessous.
+    local toolsDiv = UI.sidebar:CreateTexture(nil, "ARTWORK")
+    toolsDiv:SetPoint("TOPLEFT", UI.sidebar, "TOPLEFT", 8, -sy)
+    toolsDiv:SetPoint("TOPRIGHT", UI.sidebar, "TOPRIGHT", -8, -sy)
+    toolsDiv:SetHeight(1)
+    toolsDiv:SetColorTexture(HR.Theme.Unpack("SEPARATOR_COLOR"))
+    AfterCatalog(toolsDiv, sy, true)
+    sy = sy + NAV_GAP
+
     local optBtn = NavButton({
         image   = HR.Asset("icon-wheel"),
         size    = NAV_ICON,                                       -- pas de texte (settings)
@@ -2043,20 +2161,25 @@ local function Build()
     optBtn.mode = "options"
     StyleToolButton(optBtn)
     optBtn:SetPoint("TOP", UI.sidebar, "TOP", 0, -sy)
+    AfterCatalog(optBtn, sy)
     UI.viewButtons[#UI.viewButtons + 1] = optBtn
     sy = sy + NAV_ICON + NAV_GAP
 
-    -- Bouton FAQ (icone custom) juste SOUS Options : ouvre une vue dediee (contenu a venir).
-    local faqBtn = NavButton({
-        image   = HR.Asset("icon-faq"),
-        size    = NAV_ICON,
-        onClick = function() UI.SetViewMode("faq") end,           -- icone Blizzard : bordure rognee (crop defaut)
-    }, "FAQ")
-    faqBtn.mode = "faq"
-    StyleToolButton(faqBtn)
-    faqBtn:SetPoint("TOP", UI.sidebar, "TOP", 0, -sy)
-    UI.viewButtons[#UI.viewButtons + 1] = faqBtn
+    if SHOW_FAQ then
+        local faqBtn = NavButton({
+            image   = HR.Asset("icon-faq"),
+            size    = NAV_ICON,
+            onClick = function() UI.SetViewMode("faq") end,       -- icone Blizzard : bordure rognee (crop defaut)
+        }, "FAQ")
+        faqBtn.mode = "faq"
+        StyleToolButton(faqBtn)
+        faqBtn:SetPoint("TOP", UI.sidebar, "TOP", 0, -sy)
+        AfterCatalog(faqBtn, sy)
+        UI.viewButtons[#UI.viewButtons + 1] = faqBtn
+        sy = sy + NAV_ICON + NAV_GAP
+    end
 
+    -- (UI.UpdateViewButtons ci-dessous reconcilie aussi l'acces au catalogue.)
     UI.UpdateViewButtons()      -- etat initial (aucune vue active -> attenues)
 
 

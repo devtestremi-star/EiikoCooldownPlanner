@@ -646,6 +646,10 @@ end
 -- par defaut (cf. Database.InitDB). On ne remplace JAMAIS la table `assignments`.
 function ST.ApplyBoss(resolved, variant, encID)
     if not variant or encID == nil then return false end
+    -- Verrou d'edition : un plan importe ne doit pas pouvoir ecraser le boss d'une
+    -- variante LIEE (recue par sync, ou promue depuis un catalogue). Le garde vit ici,
+    -- au point d'ecriture, et pas seulement dans l'ecran d'import.
+    if not HR.CanEditVariant(variant) then return false end
     -- ClearVariantBossPlan tolere une variante sans table `assignments` (rows DB
     -- heritees) et sort en silence : il faut donc la creer ici avant d'ecrire.
     variant.assignments = variant.assignments or {}

@@ -155,6 +155,22 @@ local function BuildFrame()
     f.ticks   = {}      -- graduations de minute (0..5)
     f.markers = {}      -- pool de marqueurs de capacites
 
+    -- Bandeau LECTURE SEULE : une variante liee (recue par sync, ou promue depuis un
+    -- catalogue) n'est pas editable. Le mutateur refuse deja (HR.CanEditVariant, garde
+    -- pose dans Core/Plan2.lua) -- mais sans ce bandeau le joueur cliquerait dans le vide
+    -- sans comprendre. On dit POURQUOI, et on donne la sortie.
+    f.roBanner = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.roBanner:SetPoint("TOPLEFT", PAD_L, -2)
+    f.roBanner:SetPoint("TOPRIGHT", -PAD_R, -2)
+    f.roBanner:SetHeight(20)
+    f.roBanner:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+    -- INFORMATION, pas erreur : le rouge faisait lire « tu as fait une betise » alors
+    -- qu'une variante de catalogue en lecture seule est un etat parfaitement normal.
+    f.roBanner:SetBackdropColor(HR.Colors.Unpack("infoBg"))
+    f.roBanner.text = f.roBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.roBanner.text:SetPoint("CENTER")
+    f.roBanner:Hide()
+
     -- Re-rendu si la taille change (1er layout = largeur 0 sinon).
     f:SetScript("OnSizeChanged", function(self)
         if self._boss then UI.RenderPlanTimeline(self._boss) end
@@ -192,6 +208,17 @@ function UI.RenderPlanTimeline(boss)
         tk.label:ClearAllPoints()
         tk.label:SetPoint("TOP", f, "TOPLEFT", x, -LINE_Y - 8)
         tk.label:SetText(fmtTime(m * 60))
+    end
+
+    -- Verrou d'edition : etat calcule UNE fois pour toute la frise. Les mutateurs refusent
+    -- deja (Core/Plan2.lua) ; ici on ne fait que rendre le refus VISIBLE avant le clic.
+    local curVar = HR.GetActiveVariant()
+    local canEdit, whyRO = HR.CanEditVariant(curVar)
+    if curVar and not canEdit then
+        f.roBanner.text:SetText(HR.Colors.Hex("info") .. HR.EditBlockedText(whyRO, curVar) .. "|r")
+        f.roBanner:Show()
+    else
+        f.roBanner:Hide()
     end
 
     -- Occurrences planifiables (variante de timeline visualisee = active par defaut).
@@ -232,6 +259,12 @@ function UI.RenderPlanTimeline(boss)
         end
 
         -- "+" : ouvre le selecteur de defensif (nouveau format) pour CETTE occurrence.
+        -- En lecture seule on le GARDE, attenue et inerte, plutot que de le retirer : sa
+        -- disparition faisait bouger toute la colonne (les defensifs s'empilent au-dessus de
+        -- lui) et changeait la frise selon la variante regardee. Attenue, il tient sa place,
+        -- montre que l'emplacement existe, et dit par son etat qu'il n'est pas pour ici.
+        mk.plus:SetEnabled(canEdit)
+        mk.plus:SetAlpha(canEdit and 1 or 0.3)
         mk.plus:SetOnClick(function(btn) UI.OpenPlanPicker(btn, boss.id, o) end)
 
         -- Defensifs choisis (tokens du nouveau format) : empiles AU-DESSUS du "+".
@@ -261,8 +294,8 @@ function UI.RenderPlanTimeline(boss)
             -- Boutons -/+ visibles UNIQUEMENT sur le defensif selectionne (clic gauche).
             local selKey   = o.key .. "|" .. token
             local selected = (UI.planSelDef == selKey)
-            b.nudgeL:SetShown(selected)
-            b.nudgeR:SetShown(selected)
+            b.nudgeL:SetShown(selected and canEdit)
+            b.nudgeR:SetShown(selected and canEdit)
             b.nudgeL:SetScript("OnClick", function() HR.NewPlan_NudgeOffset(boss.id, o.key, token, -1000); UI.RefreshRows() end)
             b.nudgeR:SetScript("OnClick", function() HR.NewPlan_NudgeOffset(boss.id, o.key, token,  1000); UI.RefreshRows() end)
             b:SetOnClick(function(btn, mouse)
@@ -399,8 +432,17 @@ end
 
 -- Ouvre le picker custom pour cette occurrence (calcule la dispo par token).
 function UI.OpenPlanPicker(anchor, encounterID, occ)
-    if not HR.GetActiveVariant() then
+    local cur = HR.GetActiveVariant()
+    if not cur then
         HR:Print("Create a variant first (New).")
+        return
+    end
+    -- Ceinture ET bretelles : le "+" est deja masque sur une variante liee, mais ce point
+    -- d'entree est public. Ouvrir un selecteur dont chaque clic serait refuse plus bas
+    -- serait pire qu'un refus net.
+    local canEdit, why = HR.CanEditVariant(cur)
+    if not canEdit then
+        HR:Print(HR.EditBlockedText(why, cur))
         return
     end
     local dungeon = HR.content[UI.selDungeon]
@@ -422,9 +464,18 @@ function UI.OpenPlanDefMenu(anchor, encounterID, occ, token)
         local icon = HR.GetDefensiveIcon(defKey)
         root:CreateTitle(string.format("|T%s:16:16:0:0:64:64:5:59:5:59|t %s",
             tostring(icon), (d and d.name or tostring(defKey)) .. (HR.TokenSuffix(token) or "")))
-        root:CreateButton("Remove", function()
-            HR.NewPlan_Remove(encounterID, occ.key, token)
-            UI.RefreshRows()
-        end)
+        -- Verrou d'edition : sur une variante liee, on n'offre pas « Remove » -- le
+        -- mutateur refuserait de toute facon (Core/Plan2.lua) et le clic serait sans
+        -- effet visible. On affiche la raison a la place, avec la sortie.
+        local cur = HR.GetActiveVariant()
+        local canEdit, why = HR.CanEditVariant(cur)
+        if canEdit then
+            root:CreateButton("Remove", function()
+                HR.NewPlan_Remove(encounterID, occ.key, token)
+                UI.RefreshRows()
+            end)
+        else
+            root:CreateTitle(HR.Colors.Hex("info") .. HR.EditBlockedText(why, cur) .. "|r")
+        end
     end)
 end
