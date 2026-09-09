@@ -28,6 +28,19 @@ Core/
   Matcher.lua            # reconnaissance d'un event serveur par sa DURÉE (HR.MatchByDuration :
                          #   cycle/seuil via durationGroups + compteur par durée) + HR.PlanIdFor
                          #   (lien sort reconnu → occurrence du plan, mappé par NOM)
+  Validate.lua           # validation de LA route d'import de BOSS (`HR.Valid`, memo §14/§15.5).
+                         #   Feuilles a un seul lookup (CheckDungeon/CheckEncounter/OccKeys/
+                         #   CheckOccKey/CheckToken/CheckHealer), le portail d'eligibilite
+                         #   CheckEligible, le composite CheckBossPlan, un Report {code,path,
+                         #   detail} et V.Message qui traduit les codes en phrases (seul
+                         #   endroit). Politique STRICT uniquement.
+                         #   ⚠️ CE N'EST PAS « la couche de validation de l'addon » :
+                         #   Share.lua (ValidatePayload/Sanitize*), ShareText.lua (Parse/
+                         #   Resolve/ValidateAgainstVariant) et Catalog.lua (sanitizeEntry)
+                         #   gardent CHACUN les leurs. Migrer ces validateurs-la a ete etudie
+                         #   et ECARTE (memo §15 : le pire echec des sanitizers est un drop
+                         #   SILENCIEUX sur des DB deployees). N'ajoute donc pas ici un
+                         #   predicat destine a un autre chemin.
   Core.lua               # OnInitialize, point d'entrée
   Events.lua             # frame d'événements unique + dispatch (multi-handlers)
   Capture.lua            # /hp scan : capture encounterID/zoneID (ENCOUNTER_START)
@@ -36,6 +49,14 @@ Core/
                          #   assainissement, import). AUCUN transport : le partage par lien a ete
                          #   RETIRE au profit du canal de synchro. Consommateurs : Core/Sync/
                          #   PlanSync.lua et les modales Export/Import de UI/HealerSpecs.lua.
+                         #   `BuildBossPayload`/`EncodeBossPlan` = plan d'UN SEUL boss : MEME
+                         #   format (kind="variant"), `asg` reduit a ce boss, plus un champ
+                         #   `bossOnly`. Verifie INERTE sur le parc deploye (ValidatePayload ne
+                         #   controle que des champs nommes, ImportPayload n'en lit que 7,
+                         #   personne ne parcourt un payload en pairs()) -> un vieux client cree
+                         #   une variante a un boss, il n'ecrase rien. ⚠️ PAS de `tlv` dedans :
+                         #   ImportPayload l'applique via SetActiveTimelineVariant, qui ecrit une
+                         #   PREFERENCE D'AFFICHAGE du joueur (memo §6.5).
   ForeignBars.lua        # option `hideOtherBossMods` : masque les timers des AUTRES bossmods
                          #   qui font doublon. BigWigs/LittleWigs = message `BigWigs_BarCreated`
                          #   (loader, RegisterMessage avec un POINT) + `bar:Stop()` sur key
@@ -133,6 +154,20 @@ UI/
                          #   plan <-> reglages du boss (UI.RenderBossSettings : 1 ligne/sort
                          #   dedup par id = case Activer + nom editable + Play sound + selecteur
                          #   de son). Reset au changement de boss/donjon/vue/trash.
+  ImportBoss.lua         # LA route d'import d'un plan de BOSS (`UI.ImportBossPlan`), memo §14.9.
+                         #   UNE SEULE, partagee par les deux fils : le format texte web
+                         #   (UI/ImportText.lua lui passe la sortie de ST.Resolve TELLE QUELLE --
+                         #   `resolved` EST la forme interne) et l'export boss du catalogue
+                         #   (UI.ImportNativeBossPlan adapte le payload : 6 lignes).
+                         #   ⚠️ Elle NE ROUTE PAS, contrairement aux imports de variante : pas de
+                         #   changement de donjon, pas de creation, pas d'auto-designation. La
+                         #   cible est `HR.GetActiveVariant()` SANS ARGUMENT (la variante
+                         #   AFFICHEE), et elle doit passer donjon + spe heal + CanEditVariant.
+                         #   Ordre impose : eligibilite -> structure -> placabilite (tokens BRUTS,
+                         #   via ST.ValidateAgainstVariant) -> PUIS SanitizeAssignments. Assainir
+                         #   avant validerait un plan troue en silence (memo §14.7).
+                         #   Seul le boss DECLARE (`bossOnly`) est atteignable, meme si le payload
+                         #   en transporte d'autres.
   SyncFrame.lua          # modale de PROGRESSION d'une poussee (bouton Sync) : 1 ligne par membre
                          #   du groupe + spinner (8 points, zero texture) jusqu'au verdict —
                          #   `Sync success` (SYNC_OVER recu) / `Sync failed` (SYNC_START mais pas

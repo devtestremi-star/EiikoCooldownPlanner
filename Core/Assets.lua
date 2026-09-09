@@ -69,6 +69,11 @@ A.registry = {
     ["icon-defs"]     = { path = "Interface\\Icons\\ability_warrior_defensivestance" },
     ["icon-settings"] = { path = "Interface\\Icons\\inv_misc_gear_01" },
     ["icon-trash"]    = { path = "Interface\\Icons\\inv_misc_bone_skull_02" },
+    -- Import : parchemin. Le bouton de la sidebar ouvre la modale d'import, qui reconnait
+    -- seule le type de ce qu'on lui colle (variante, plan de boss, catalogue).
+    ["icon-import"]   = { path = "Interface\\Icons\\INV_Scroll_03" },
+    -- Catalogue : recherche de plans de la communaute, par donjon.
+    ["icon-catalog"]  = { path = "Interface\\Icons\\INV_Misc_Book_11" },
 }
 
 -- Ajoute / remplace une entree a l'execution (ex. un module enregistre ses assets).

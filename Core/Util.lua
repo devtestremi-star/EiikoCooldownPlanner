@@ -19,6 +19,51 @@ function HR:Debug(...)
 end
 
 -- Copie profonde d'une table (utile pour cloner des defaults).
+-- Neutralise le markup d'une chaine d'origine EXTERNE avant affichage.
+--
+-- POURQUOI : les FontStrings de WoW interpretent `|c` (couleur), `|T...|t` (texture) et
+-- surtout `|H...|h` (LIEN CLIQUABLE). Un nom de variante, un pseudo d'auteur ou un handle
+-- de reseau social viennent d'une chaine collee, donc de n'importe qui -- et s'affichent
+-- chez quelqu'un d'autre. Sans echappement, un nom peut se faire passer pour un lien
+-- d'objet, une icone, ou du texte colore dans l'UI d'un tiers.
+--
+-- Doubler la barre suffit : `||` est rendu comme une barre litterale et ne demarre
+-- aucune sequence.
+--
+-- ⚠️ A L'AFFICHAGE, JAMAIS AU STOCKAGE. Deux raisons : reecrire une donnee stockee est
+-- precisement ce que la regle absolue du projet interdit ; et une chaine echappee en base
+-- repartirait echappee au re-export, le `||` se composant a chaque cycle. La donnee reste
+-- brute, seul le rendu est assaini.
+-- Tronque a `maxChars` CARACTERES, pas a maxChars OCTETS, et sans couper dedans un
+-- caractere multi-octets.
+--
+-- ⚠️ `#s` et `s:sub()` comptent des OCTETS. Couper au milieu d'un caractere accentue produit
+-- une sequence UTF-8 INVALIDE : le lecteur affiche un losange noir, et surtout
+-- `C_EncodingUtil.SerializeCBOR` peut refuser la chaine -- ce qui fait echouer tout un
+-- export sur un « Encoding failed » qui n'explique rien. Les noms de variantes portent des
+-- accents en permanence, et une saisie bornee a 64 CARACTERES pese jusqu'a 128 octets : le
+-- cas n'a rien de theorique.
+--
+-- En UTF-8 un octet de TETE est < 0x80 (ASCII) ou >= 0xC0 (debut de sequence) ; les octets
+-- de continuation sont entre 0x80 et 0xBF. On avance donc de tete en tete.
+-- `suffix` (optionnel) n'est ajoute que si la chaine a REELLEMENT ete coupee.
+function HR.TruncateUTF8(s, maxChars, suffix)
+    if type(s) ~= "string" or type(maxChars) ~= "number" then return s end
+    local n, i, len = 0, 1, #s
+    while i <= len do
+        if n == maxChars then return s:sub(1, i - 1) .. (suffix or "") end
+        local b = s:byte(i)
+        i = i + ((b < 0x80 and 1) or (b < 0xE0 and 2) or (b < 0xF0 and 3) or 4)
+        n = n + 1
+    end
+    return s
+end
+
+function HR.EscapeMarkup(s)
+    if type(s) ~= "string" then return s end
+    return (s:gsub("|", "||"))
+end
+
 function HR.DeepCopy(src)
     if type(src) ~= "table" then return src end
     local dst = {}

@@ -160,6 +160,23 @@ end
 -- (HR.Schedule.PlanAll) -> identiques a "what's next" pour un meme defensif (source unique,
 -- aucun recalcul ici). On se contente de CLASSER (external / appel perso) et de filtrer
 -- (jouable par le joueur). `time` = relatif au pull (ce qu'attend LayoutPersoRow).
+-- Ce defensif appartient-il au TOOLKIT HEAL (= groupe 1 "Healer CDs" du picker,
+-- cf. HR.GetPlaceableDefsFor) ? C'est ce que l'option "Show heal cooldowns" masque.
+--
+-- La reponse ne tient PAS dans la seule definition : elle est portee autant par le TOKEN.
+--   * CD de spe heal (Tranquility...) -> `role = "HEALER"` sur la definition ;
+--   * Ramp                            -> pas de `class` (ouvert a tous les heals) mais
+--                                        `role = "HEALER"` ;
+--   * trinket du heal (Vessel)        -> NI class NI role : c'est le suffixe "@heal" du
+--                                        token qui le distingue de la copie portee par un
+--                                        DPS (meme objet, deux porteurs, deux cooldowns).
+-- Tester `d.role` seul laissait donc passer le trinket, qui retombait en "CD perso" et
+-- restait affiche alors que l'option demandait de le cacher.
+local function IsHealToolkit(defID, d)
+    if d and d.role == "HEALER" then return true end
+    return tostring(defID):find("@heal", 1, true) ~= nil
+end
+
 local function PlayerPlanCDs(s)
     local pull = s.pullTime or 0
     local cds = {}
@@ -170,15 +187,24 @@ local function PlayerPlanCDs(s)
         if d and d.external and HR.TokenIsMine(defID) then   -- rôle+@heal-conscient (copie heal vs dps)
             cds[#cds + 1] = { defID = defID, time = time, name = d.name,
                               icon = HR.GetDefensiveIcon(defID), kind = "external" }
-        elseif Opt().upcomingHeals and d and d.role == "HEALER" and not d.external and HR.TokenIsMine(defID) then
-            -- CD de HEAL du joueur (option "Show heal cooldowns"). d.role == "HEALER" => TokenIsMine
-            -- (PlayerCanUseDefensive) n'est vrai que pour un HEAL de cette classe/spe : healer-only.
+        elseif Opt().upcomingHeals and d and IsHealToolkit(defID, d) and not d.external
+               and HR.TokenIsMine(defID) then
+            -- Toolkit HEAL du joueur (option "Show heal cooldowns") : CD de spe, Ramp, et le
+            -- trinket porte par le heal. TokenIsMine reste healer-only pour les trois (role
+            -- HEALER via PlayerCanUseDefensive, cas explicite pour RAMP, suffixe "@heal").
             cds[#cds + 1] = { defID = defID, time = time, name = d.name,
                               icon = HR.GetDefensiveIcon(defID), kind = "heal" }
-        elseif d and not d.class and not d.external and HR.TokenIsMine(defID) then
-            -- appel generique (SMALL_DEF/EMPTY_BAG) = CD perso. SMALL_DEF -> icone du perso "main"
-            -- (HR.GetDirectiveIcon) ; EMPTY_BAG garde son icone. TokenIsMine exclut SMALL_DEF pour
-            -- un TANK (pas de directive de CD perso au tank).
+        elseif d and not d.class and not IsHealToolkit(defID, d) and not d.external
+               and HR.TokenIsMine(defID) then
+            -- Appel generique (SMALL_DEF/EMPTY_BAG) ou trinket porte par un DPS = CD perso.
+            -- SMALL_DEF -> icone du perso "main" (HR.GetDirectiveIcon) ; EMPTY_BAG et le
+            -- trinket gardent la leur. TokenIsMine exclut SMALL_DEF pour un TANK (pas de
+            -- directive de CD perso au tank) et reserve le trinket NU au non-heal.
+            --
+            -- `not IsHealToolkit` EST LA CONDITION QUI COMPTE, pas une precaution : sans elle,
+            -- Ramp et le trinket "@heal" -- qui n'ont pas de `class` -- retombaient ICI des que
+            -- "Show heal cooldowns" etait decoche. Ils restaient affiches, requalifies en CD
+            -- perso : l'option ne masquait rien, elle changeait leur categorie.
             cds[#cds + 1] = { defID = defID, time = time, name = d.name,
                               icon = HR.GetDirectiveIcon(defID), kind = "personal" }
         end

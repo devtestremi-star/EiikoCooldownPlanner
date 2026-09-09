@@ -63,6 +63,10 @@ Theme.themes = {
         -- Conteneurs internes (panneau Summary/Variantes...)
         CONTAINER_BACKGROUND_COLOR           = "panelBg",  -- {0.08,0.08,0.09,0.98}
         CONTAINER_BORDER_COLOR               = "gray40",
+        -- Bordure d'une SECTION d'ecran (les 4 blocs du catalogue). Distinct du conteneur
+        -- generique ci-dessus : une section STRUCTURE la page, elle porte donc l'identite
+        -- violette d'ECP, la ou un conteneur quelconque reste neutre.
+        SECTION_BORDER_COLOR                 = "purple",
         CONTAINER_BORDER_THICKNESS           = 1,          -- px
         -- Fond noir partage des 3 zones "chrome" : sidebar + boss bar + bandeau titre
         ZONE_BACKGROUND                      = "black",
@@ -106,6 +110,7 @@ Theme.themes = {
         SEPARATOR_COLOR                      = "green",
         CONTAINER_BACKGROUND_COLOR           = "panelBg",
         CONTAINER_BORDER_COLOR               = "green",
+        SECTION_BORDER_COLOR                 = "green",
         CONTAINER_BORDER_THICKNESS           = 1,
         ZONE_BACKGROUND                      = "black",
         GLOBAL_BACKGROUND                    = "windowBg",

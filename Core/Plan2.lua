@@ -322,6 +322,22 @@ function HR.CleanupBaseVariants()
     end
 end
 
+--------------------------------------------------------------------------------
+-- `dID` SUR LA VARIANTE
+--
+-- Le donjon n'etait porte que par la POSITION de rangement (`dungeons[dID].variants[id]`) :
+-- l'objet lui-meme l'ignorait. Des qu'une variante quitte son arbre -- export, pack,
+-- catalogue -- l'information se perdait. Un pack publie sans ce champ arrivait chez le
+-- lecteur avec des entrees « donjon inconnu », et tout le catalogue etait rejete.
+--
+-- Ce n'est PAS une seconde source de verite concurrente : c'est la DONNEE, et la position
+-- de rangement en est un INDEX. Le champ fait foi ; on range en le lisant.
+--
+-- ⚠️ AUCUN RATTRAPAGE des variantes existantes : reecrire en masse la DB d'un joueur est
+-- interdit. Le champ n'existe donc que sur ce qui se cree A PARTIR DE MAINTENANT, et tout
+-- lecteur doit tolerer son absence en retombant sur le rangement.
+--------------------------------------------------------------------------------
+
 -- Importe une variante PARTAGEE dans un donjon (insertion directe, format V2). `deleteAt`
 -- (timestamp serveur) => auto-suppression au prune (nil = permanente). Renvoie la variante.
 -- L'echeance d'auto-suppression est une donnee PERSONNELLE : on ne la stocke PAS sur la
@@ -334,6 +350,7 @@ function HR.V2_ImportVariant(dID, name, healer, externals, talentSpells, assignm
     local id = db.nextId; db.nextId = id + 1
     local v = {
         id = id, name = name, healer = healer,
+        dID          = dID,                 -- cf. note sur `dID` plus bas
         externals    = HR.DeepCopy(externals or {}),
         talentSpells = HR.DeepCopy(talentSpells or {}),
         assignments  = HR.DeepCopy(assignments or {}),
@@ -392,6 +409,7 @@ function HR.V2_CreateVariant(name, healer, externals, talentSpells, opts)
     end
     local v = {
         id = id, name = name, healer = healer,
+        dID          = currentDungeon,      -- cf. note sur `dID` plus bas
         externals    = HR.DeepCopy(externals or {}),
         talentSpells = HR.DeepCopy(talentSpells or {}),   -- { [spellID] = cle_de_variante }
         isTemplate   = opts.isTemplate or nil,
@@ -427,6 +445,72 @@ function HR.IsTokenPlaceable(v, token)
     return true                                                          -- token nu : valide tant que n>=1
 end
 
+--------------------------------------------------------------------------------
+-- VERROU D'EDITION
+-- Une variante LIEE (recue par le canal Sync, ou promue depuis un catalogue) n'est pas
+-- editable : elle est le reflet du plan de quelqu'un d'autre, et une mise a jour de son
+-- auteur l'ecrasera. Sans ce verrou, le joueur y travaille et perd son travail sans
+-- comprendre pourquoi.
+--
+-- L'ECHAPPATOIRE est la DUPLICATION, deja en place : HR.V2_DuplicateVariant ne recopie
+-- ni `synced` ni `syncFrom` (ni `catalogVariantId`), donc la copie est libre et sort du
+-- perimetre des ecrasements futurs.
+--
+-- LE GARDE VIT AU POINT DE MUTATION, pas seulement dans l'UI. Un grisage de bouton se
+-- contourne par tout autre chemin -- import texte, sync, prochaine feature. L'UI verifie
+-- AUSSI, mais pour l'affordance (griser, expliquer), pas pour la surete.
+--
+-- La garde de COMBAT n'entre pas ici : personne n'edite un plan pendant un pull, et
+-- melanger « ce plan n'est pas a toi » (permanent, propre a l'objet) avec « pas
+-- maintenant » (temporaire, propre au contexte) forcerait une seule raison a expliquer
+-- deux choses sans rapport.
+--------------------------------------------------------------------------------
+
+-- Codes de blocage (stables : l'UI les traduit, elle ne les affiche pas bruts).
+HR.EDIT_OK      = nil
+HR.EDIT_NO_VAR  = "NO_VARIANT"   -- rien a editer
+HR.EDIT_SYNCED  = "SYNCED"       -- plan recu par le canal Sync -- MIS DE COTE, cf. ci-dessous
+HR.EDIT_CATALOG = "CATALOG"      -- variante promue depuis un catalogue
+
+-- Cette variante est-elle editable ? Renvoie (bool, code).
+-- ⚠️ ECHOUE FERME : nil, table douteuse, etat inconnu => false. Un garde qui autorise en
+-- cas de doute ne garde rien.
+--
+-- ⚠️⚠️ `v.synced` N'EST VOLONTAIREMENT PAS TESTE ICI. Ne pas le rajouter sans decision.
+-- Ce n'est pas un oubli : les plans recus par le canal Sync existent DEJA chez des joueurs
+-- en production, et les verrouiller serait un changement de comportement sur des donnees
+-- vivantes -- sans rapport avec la feature catalogue qui a amene ce garde. Ca merite sa
+-- propre decision et sa ligne de changelog, pas d'etre embarque au passage.
+--   (Le fond reste vrai : editer un plan synce est un piege aujourd'hui, puisque
+--    PlanSync.overwrite fait `wipe(v.assignments)` a la prochaine poussee de son auteur --
+--    le travail disparait en silence. Le verrouiller reste donc la bonne correction ; c'est
+--    le MOMENT de la livrer qui est en suspens. Tout est pret : decommenter la ligne
+--    ci-dessous et le chemin complet s'active, code de raison et texte inclus.)
+function HR.CanEditVariant(v)
+    if type(v) ~= "table" then return false, HR.EDIT_NO_VAR end
+    -- if v.synced        then return false, HR.EDIT_SYNCED end   -- MIS DE COTE (cf. ci-dessus)
+    if v.catalogVariantId then return false, HR.EDIT_CATALOG end
+    return true
+end
+
+-- Phrase a montrer au joueur, avec le remede. Un bouton grise sans explication est un
+-- bug de conception : il faut dire POURQUOI et COMMENT s'en sortir.
+function HR.EditBlockedText(code, v)
+    if code == HR.EDIT_SYNCED then
+        local who = (v and v.syncFrom and v.syncFrom.name) or "another player"
+        return ("This plan was received from %s. Duplicate it to make it yours."):format(who)
+    elseif code == HR.EDIT_CATALOG then
+        return "This plan comes from a catalogue and stays in sync with its author. "
+            .. "Duplicate it to make it yours."
+    end
+    return "This plan cannot be edited."
+end
+
+-- Raccourci interne : le garde des mutateurs ci-dessous.
+local function canEditActive()
+    return (HR.CanEditVariant(HR.GetActiveVariant()))
+end
+
 -- Edite une variante EXISTANTE : change name + externals + talents (le HEAL reste VERROUILLE),
 -- puis SCANNE le plan et SUPPRIME EN PLACE les defensifs devenus orphelins (token plus placable
 -- avec la nouvelle compo). Suppression en place => preserve le lien DB. Action 100% user
@@ -434,6 +518,7 @@ end
 function HR.V2_UpdateVariant(id, name, externals, talentSpells)
     local s = dStore(); if not s then return nil end
     local v = id and s.variants[id]; if not v then return nil end
+    if not HR.CanEditVariant(v) then return nil end          -- verrou d'edition
     if name and name ~= "" then v.name = name end
     v.externals    = HR.DeepCopy(externals or {})
     v.talentSpells = HR.DeepCopy(talentSpells or {})
@@ -467,6 +552,7 @@ function HR.V2_DuplicateVariant(name)
     local id = db.nextId; db.nextId = id + 1
     local v = {
         id = id, name = name, healer = cur.healer,
+        dID          = cur.dID or currentDungeon,   -- cf. note sur `dID` plus bas
         externals    = HR.DeepCopy(cur.externals or {}),
         talentSpells = HR.DeepCopy(cur.talentSpells or {}),
         assignments  = HR.DeepCopy(cur.assignments or {}),
@@ -536,6 +622,7 @@ end
 function HR.NewPlan_Add(encounterID, occKey, token)
     local v = HR.GetActiveVariant()
     if not v then return false end
+    if not HR.CanEditVariant(v) then return false end        -- verrou d'edition
     v.assignments[encounterID] = v.assignments[encounterID] or {}
     local list = v.assignments[encounterID][occKey]
     if not list then list = {}; v.assignments[encounterID][occKey] = list end
@@ -547,6 +634,7 @@ end
 function HR.NewPlan_Remove(encounterID, occKey, token)
     local v = HR.GetActiveVariant()
     if not v or not v.assignments[encounterID] then return end
+    if not HR.CanEditVariant(v) then return end              -- verrou d'edition
     local list = v.assignments[encounterID][occKey]
     if list then
         for i, e in ipairs(list) do if e.token == token then table.remove(list, i); break end end
@@ -559,6 +647,7 @@ end
 -- 100% user, declenchee uniquement apres confirmation. Renvoie true si quelque chose a ete vide.
 function HR.ClearVariantBossPlan(variant, encounterID)
     if not variant or encounterID == nil or not variant.assignments then return false end
+    if not HR.CanEditVariant(variant) then return false end  -- verrou d'edition
     if variant.assignments[encounterID] == nil then return false end
     variant.assignments[encounterID] = nil
     return true
@@ -584,6 +673,7 @@ function HR.NewPlan_GetOffset(enc, occKey, token)
 end
 
 function HR.NewPlan_SetOffset(enc, occKey, token, ms)
+    if not canEditActive() then return 0 end                 -- verrou (couvre NudgeOffset)
     local e = findEntry(enc, occKey, token)
     if not e then return 0 end
     ms = math.max(-OFFSET_MAX_MS, math.min(OFFSET_MAX_MS, math.floor((ms or 0) + 0.5)))

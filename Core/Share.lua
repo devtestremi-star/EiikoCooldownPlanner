@@ -28,7 +28,14 @@ local B64     = (Enum and Enum.Base64Variant and Enum.Base64Variant.StandardUrlS
 --------------------------------------------------------------------------------
 
 -- table -> chaine ASCII transportable. nil en cas d'echec.
-local function Encode(value)
+--
+-- PUBLIQUE et GENERIQUE a dessein : c'est LE pipeline de transport de l'addon, et il ne
+-- doit exister qu'une fois. L'addon compagnon « ECP Packager » definit son propre payload
+-- (un conteneur de packs) mais le fait voyager PAR ICI -- sinon deux implementations
+-- devraient s'accorder sans que rien ne le verifie, et le jour ou l'une change d'enum,
+-- l'autre reçoit « chaine corrompue » sur une chaine parfaitement valide.
+-- Le PIPELINE est a nous ; le PAYLOAD est a celui qui le definit.
+function Share.EncodeRaw(value)
     if not C_EncodingUtil then return nil end
     local ok, cbor = pcall(C_EncodingUtil.SerializeCBOR, value)
     if not ok or type(cbor) ~= "string" then return nil end
@@ -45,16 +52,30 @@ end
 function Share.EncodeVariant(dungeonID, variant)
     local payload = Share.BuildPayload(dungeonID, variant)
     if not payload then return nil end
-    return Encode(payload)
+    return Share.EncodeRaw(payload)
 end
 
 -- chaine ASCII -> table. nil en cas d'echec (entree corrompue / malveillante).
-local function Decode(str)
+-- Publique pour la meme raison que Share.EncodeRaw : un seul pipeline, un seul endroit
+-- ou vivent les choix d'enum. Le decodeur des chaines de catalogue passe par ici.
+-- Plafond de la charge DECOMPRESSEE. Une chaine courte peut se decompresser en quelque
+-- chose d'enorme ; les controles de structure n'agissent qu'apres la deserialisation,
+-- donc trop tard. C'est ICI, entre la decompression et le CBOR, le seul endroit ou la
+-- taille reelle est mesurable.
+--   Repere : un conteneur de ~32 variantes pese ~70 Ko decompresses. 512 Ko laisse un
+--   facteur 7 -- assez large pour ne jamais gener, assez serre pour couper l'absurde.
+--   Limite honnete : le pic memoire de la decompression a deja eu lieu quand on teste.
+--   On empeche la deserialisation et l'ecriture en SavedVariables -- le dommage durable --
+--   pas l'allocation. L'API ne rend la chaine que d'un bloc.
+local MAX_DECOMPRESSED = 512 * 1024
+
+function Share.DecodeRaw(str)
     if not C_EncodingUtil or type(str) ~= "string" then return nil end
     local ok, comp = pcall(C_EncodingUtil.DecodeBase64, str, B64)
     if not ok or type(comp) ~= "string" then return nil end
     local ok2, cbor = pcall(C_EncodingUtil.DecompressString, comp, DEFLATE)
     if not ok2 or type(cbor) ~= "string" then return nil end
+    if #cbor > MAX_DECOMPRESSED then return nil, "too_large" end
     local ok3, value = pcall(C_EncodingUtil.DeserializeCBOR, cbor)
     if not ok3 then return nil end
     return value
@@ -63,7 +84,7 @@ end
 -- Chaine d'import (copier/coller) -> payload VALIDE de variante. nil si echec (chaine
 -- corrompue / forme invalide / donjon inconnu). Pendant de Share.EncodeVariant.
 function Share.DecodeVariant(str)
-    local payload = Decode(str)
+    local payload = Share.DecodeRaw(str)
     if not Share.ValidatePayload(payload) then return nil end
     return payload
 end
@@ -108,6 +129,46 @@ function Share.BuildPayload(dungeonID, variant)
         asg    = variant.assignments,       -- [encounterID][occKey] = { {token,offset}, ... }
         tlv    = tlv,                        -- [encounterID] = variante de timeline JOUEE
     }
+end
+
+-- Payload d'UN SEUL BOSS (memo §14.1). C'est le MEME format que ci-dessus -- « comme si ce
+-- boss etait le seul du donjon » -- plus un champ qui declare l'intention.
+--
+-- Pourquoi pas une enveloppe dediee : `ValidatePayload` ne controle que des champs NOMMES et
+-- ne rejette aucun champ inconnu, `ImportPayload` ne lit que dID/name/healer/ext/tsp/asg/tlv,
+-- et aucun code ne parcourt un payload en `pairs()`. `bossOnly` est donc INERTE sur tout le
+-- parc deja installe : un client d'avant la feature cree une variante ordinaire ne contenant
+-- que ce boss. Il ajoute, il n'ecrase rien.
+--
+-- ⚠️ PAS de `tlv` ici, contrairement a BuildPayload. `ImportPayload` l'applique via
+-- HR.SetActiveTimelineVariant, qui ecrit une PREFERENCE D'AFFICHAGE du joueur, hors variante.
+-- L'ecrire en effet de bord de l'import d'un seul boss est exactement le probleme ecarte en
+-- §6.5.
+--
+-- `name` voyage mais n'est PAS ecrit a l'import : la variante de destination garde le sien.
+-- Il ne sert qu'a l'ecran de confirmation.
+function Share.BuildBossPayload(dungeonID, variant, encID)
+    if not dungeonID or not variant or encID == nil then return nil end
+    local asg = variant.assignments and variant.assignments[encID]
+    if type(asg) ~= "table" or not next(asg) then return nil end
+    return {
+        v        = PROTO,
+        kind     = "variant",
+        dID      = dungeonID,
+        name     = variant.name,
+        healer   = variant.healer,
+        ext      = variant.externals,
+        tsp      = variant.talentSpells,
+        asg      = { [encID] = asg },
+        bossOnly = encID,
+    }
+end
+
+-- Chaine d'export du plan d'un seul boss. nil si le boss n'a aucun placement.
+function Share.EncodeBossPlan(dungeonID, variant, encID)
+    local payload = Share.BuildBossPayload(dungeonID, variant, encID)
+    if not payload then return nil end
+    return Share.EncodeRaw(payload)
 end
 
 -- Le payload recu est-il exploitable ? (forme V2 + donjon connu)

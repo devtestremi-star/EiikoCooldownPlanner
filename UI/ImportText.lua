@@ -2,9 +2,12 @@
 -- Ecrans d'import des plans au format texte `ecp;2` (outil web). Cf. PLAN_FORMAT.md.
 --
 -- Deux chemins, selon le `kind` du document :
---   CAS 1 (kind=boss)    : ECRASE le plan d'un seul boss dans la variante AFFICHEE.
---                          Aucun nom demande. Bloque si le plan n'est pas jouable
---                          tel quel dans cette variante.
+--   CAS 1 (kind=boss)    : DELEGUE a UI.ImportBossPlan (UI/ImportBoss.lua) -- LA route
+--                          d'import de boss, partagee avec l'export boss du catalogue
+--                          (memo §14.9). Elle ECRASE un boss dans la variante AFFICHEE et
+--                          ne route pas : le joueur doit deja etre sur une variante
+--                          eligible. Cet ecran ne garde que la confirmation
+--                          (UI.OpenBossConfirm), elle aussi partagee.
 --   CAS 2 (kind=variant) : cree une NOUVELLE variante ; le nom est saisi par le
 --                          joueur, tout le reste est dicte par l'import.
 --
@@ -24,7 +27,9 @@ local function BuildReportModal()
     local C = UI.Components
     local m = C.Window(UIParent, {
         name = "ECPImportReportModal", title = "Import failed", width = 620, height = 420,
+        bgTexture = C.ModalBackgroundTexture(),
     })
+    C.ModalBackground(m)      -- cadrage "cover" + voile ; sans bgTexture elle n'a rien a poser
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
     tinsert(UISpecialFrames, "ECPImportReportModal")
 
@@ -83,7 +88,9 @@ local function BuildConfirmModal()
     local C = UI.Components
     local m = C.Window(UIParent, {
         name = "ECPImportConfirmModal", title = "Import plan", width = 560, height = 340,
+        bgTexture = C.ModalBackgroundTexture(),
     })
+    C.ModalBackground(m)      -- cadrage "cover" + voile ; sans bgTexture elle n'a rien a poser
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
     tinsert(UISpecialFrames, "ECPImportConfirmModal")
 
@@ -137,27 +144,48 @@ end
 -- CAS 1 : ecrasement d'un boss
 --------------------------------------------------------------------------------
 
-local function OpenBossConfirm(resolved, parsed, variant)
+-- Le bandeau que TOUS les fils peuvent afficher sans mentir : l'ecrasement est integral sur
+-- ce boss, et n'atteint aucun autre.
+local WARN_BASE = "This boss's current plan will be REPLACED. Other bosses are untouched."
+
+-- Ce que le format WEB ne sait pas porter, verifie dans le code : `BuildDefIndex` n'indexe
+-- que les defensifs ayant un `spellID` numerique, or SMALL_DEF / EMPTY_BAG / RAMP n'en ont
+-- aucun -- ils sont INEXPRIMABLES dans une ligne `u;`. Les trinkets, eux, sont exclus par
+-- `CandidatesFor`. Combine a ClearVariantBossPlan, ces placements sont donc perdus.
+-- ⚠️ Cet avertissement est FAUX pour le format natif, qui les transporte tous : il ne doit
+-- jamais etre affiche par defaut (memo §14.9).
+local WARN_TEXT_FORMAT = WARN_BASE .. "\n" ..
+    "Manual entries that the format cannot carry (Defensive, Empty the bag, Ramp, trinkets) " ..
+    "will be lost on this boss."
+
+-- Ecran de confirmation d'un ecrasement de boss -- PARTAGE par les deux fils (memo §14.9) :
+-- le format texte web et l'export boss du catalogue (format natif). Deux ecrans qui
+-- confirment le meme geste avec les memes consequences finiraient par diverger, et cette
+-- divergence-la serait visible a l'ecran.
+--
+-- `resolved` : duck-type minimal { dID, dungeon, boss, assignments }. Le fil natif en
+-- fabrique un (cf. UI/ImportBoss.lua) ; le fil web passe la sortie de ST.Resolve telle quelle.
+-- `opts.warn` : le bandeau. Le defaut ne dit QUE ce qui est vrai partout -- un appelant
+-- distrait affiche donc un sous-ensemble exact, jamais une affirmation fausse.
+function UI.OpenBossConfirm(resolved, encID, variant, opts)
     local ST = HR.ShareText
     local m  = ConfirmModal()
-    local n  = ST.CountAssignments(resolved.assignments, parsed.encID)
+    local n  = ST.CountAssignments(resolved.assignments, encID)
 
     m.summary:SetText(("Dungeon:  |cffffd100%s|r\nBoss:  |cffffd100%s|r\n" ..
                        "Target variant:  |cffffd100%s|r\nIncoming assignments:  |cffffd100%d|r")
         :format(resolved.dungeon.name or "?", resolved.boss.name or "?",
-                variant.name or "?", n))
+                HR.EscapeMarkup(variant.name or "?"), n))
 
     m.warn:Show()
-    m.warn:SetText("This boss's current plan will be REPLACED. Other bosses are untouched.\n" ..
-                   "Manual entries that the format cannot carry (Defensive, Empty the bag, " ..
-                   "Ramp, trinkets) will be lost on this boss.")
+    m.warn:SetText((opts and opts.warn) or WARN_BASE)
     m.nameLbl:Hide(); m.nameBox:Hide()
     m.ok:SetText("Overwrite")
     m.ok:Enable(); m.ok:SetAlpha(1)
     m.Sync = nil
 
     m.Accept = function()
-        ST.ApplyBoss(resolved, variant, parsed.encID)
+        ST.ApplyBoss(resolved, variant, encID)
         m:Hide()
         if UI.ShowDungeonVariant then UI.ShowDungeonVariant(resolved.dID, variant) end
         if UI.RefreshRows then UI.RefreshRows() end
@@ -245,15 +273,14 @@ function UI.ImportTextPlan(str)
     end
 
     if parsed.kind == "boss" then
-        local variant = HR.GetActiveVariant(resolved.dID)
-        local verrs = ST.ValidateAgainstVariant(resolved, variant)
-        if #verrs > 0 then
-            UI.ShowImportReport(
-                ("This boss plan is not playable in variant \"%s\". Nothing was imported.")
-                    :format(variant and variant.name or "?"), verrs)
-            return false
-        end
-        OpenBossConfirm(resolved, parsed, variant)
+        -- UNE SEULE route de boss (memo §14.9), partagee avec l'export boss du catalogue.
+        -- ⚠️ Changement de comportement assume : ce chemin appelait `GetActiveVariant(dID)`,
+        -- qui DESIGNAIT tout seul une variante dans un donjon que le joueur ne regarde pas.
+        -- Desormais un plan de boss atterrit la ou le joueur se tient, et subit les memes
+        -- verifications que l'import natif (donjon, spe heal, verrou de lecture seule).
+        -- Le format web est une v1 preuve de concept que personne n'utilise : on a les mains
+        -- libres, et la coherence vaut mieux que deux comportements pour le meme geste.
+        return UI.ImportBossPlan(resolved, parsed.encID, { warn = WARN_TEXT_FORMAT })
     else
         OpenVariantConfirm(resolved, parsed)
     end
