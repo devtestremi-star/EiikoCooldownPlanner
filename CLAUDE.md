@@ -277,7 +277,16 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   une fois depuis la base `.lua`. La table `healerDefaults` reste reconstruite depuis
   le `.lua` à chaque load — seuls les `assignments` sont DB-backés.)
 - **Défensifs** : `HR.defensives[key] = { name, cooldown, [class], [role], [spec],
-  [charges], [itemId], [icon], [spellID], [aoeOnly] }`. `key` = spellID, ou chaîne
+  [charges], [itemId], [icon], [spellID], [aoeOnly], [talentReq], [talentNot],
+  [talentRank] }`. Variantes de CD départagées par talents : `talentReq` (tous présents),
+  `talentNot` (aucun), `talentRank = { [id] = n }` (rang **exact** d'un talent à plusieurs
+  points, ex. Call of the Righteous 1241511 → AW/AC en 3 versions `:0/:1/:2`). Les sets de
+  talents valent `{ [spellID] = rang }` (`talentSetFromConfig`, `ShareText.TalentSet` où un
+  id répété = rang, cf. PLAN_FORMAT.md §11.8). `noSync = true` = sort de GESTION du healer
+  (court, très répété, ex. Beacon of Virtue 15 s) : placable dans le plan, mais **ne transite
+  pas par le Sync** (`Share.StripNoSync` sur une COPIE à l'émission dans `PlanSync.Push`, et
+  à la réception avant la gate) ; export/catalogue/Packager le transportent. Le flag décide,
+  jamais un choix par placement ; aucun signal UI. `key` = spellID, ou chaîne
   synthétique (variantes de CD / entrées génériques comme `"SMALL_DEF"` (cd 90, nom
   « Defensive » = **appel défensif perso GÉNÉRIQUE unique** ; la nuance small/big a été
   retirée, `BIG_DEF` supprimé) / `"EMPTY_BAG"` (cd 0, tête de mort) = appels de défensif
@@ -355,6 +364,10 @@ Messages livres :
   recoit jamais un aux poussees suivantes) et *Trust this author* (whitelist
   `db2.syncTrust[<auteur qualifie>]`, cle additive — plus aucune demande pour CE joueur,
   meme pour un plan jamais vu).
+  **Sorts `noSync`** (flag `HR.defensives`) : retires du payload a l'emission
+  (`EncodeVariant(dID, v, { stripNoSync = true })` -> copie) ET a la reception (`OnNetMessage`
+  PLAN, juste apres `DecodeVariant`, pour les emetteurs en version anterieure). Le plan local du
+  healer les garde ; Export/catalogue ne filtrent pas (pas d'`opts`).
   ⚠️ L'etat renvoye a l'emetteur est un **champ de la reponse**, pas un evenement
   de plus : `SYNC_START` porte `""` (recu) ou `"PENDING"` (j'attends mon joueur -> la ligne
   affiche « Pending approval… » et echappe au verdict des 5 s), `SYNC_OVER` porte `"OK"`

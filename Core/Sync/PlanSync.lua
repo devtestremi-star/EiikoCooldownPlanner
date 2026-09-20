@@ -52,6 +52,9 @@ end
 -- (HR.Share.EncodeVariant : BuildPayload -> CBOR -> Deflate -> Base64) ; l'id distant
 -- voyage dans le corps de la trame, PAS dans le CBOR, pour ne rien changer au format du
 -- canal de partage deja deploye chez les joueurs.
+-- `stripNoSync` : les sorts flagges `noSync` (Data/Defensives.lua -- gestion du healer, courts,
+-- tres repetes) ne TRANSITENT PAS par le Sync. Le plan LOCAL du healer les garde intacts (le
+-- filtre travaille sur une copie) ; export et catalogue les transportent normalement.
 function PlanSync.Push(dID, variant)
     if not dID or not variant then
         HR:Print("Open a dungeon and select a variant before syncing.")
@@ -65,7 +68,7 @@ function PlanSync.Push(dID, variant)
             :format((variant.syncFrom and shortName(variant.syncFrom.name)) or "another player"))
         return
     end
-    local data = HR.Share and HR.Share.EncodeVariant(dID, variant)
+    local data = HR.Share and HR.Share.EncodeVariant(dID, variant, { stripNoSync = true })
     if not data then
         HR:Print("Failed to encode the plan (C_EncodingUtil unavailable?).")
         return
@@ -220,6 +223,15 @@ function PlanSync.OnPlan(sender, body, msgId)
     -- Payload deja VALIDE par DecodeVariant (ValidatePayload : donjon connu, profil de heal reel).
     local payload = HR.Share and HR.Share.DecodeVariant(data)
     if not payload then HR:Debug("[sync] PLAN rejected (invalid payload)") return end
+
+    -- Filtre `noSync` cote RECEPTION aussi : un emetteur en version ANTERIEURE ne filtre pas a
+    -- l'emission, et les sorts flagges existent deja chez lui. Un seul point, ici, AVANT la
+    -- gate : il couvre l'application directe (auteur autorise) comme la modale d'accord (Ask ->
+    -- Accept -> Apply), qui voit donc le payload deja filtre. `payload` est une table fraiche
+    -- issue du decodage -- pas la DB -- la remplacer est sans risque.
+    local dropped
+    payload.asg, dropped = HR.Share.StripNoSync(payload.asg)
+    if dropped > 0 then HR:Debug("[sync] noSync stripped on receive:", dropped) end
 
     local dID = payload.dID
     local idx = indexStore(dID); if not idx then return end

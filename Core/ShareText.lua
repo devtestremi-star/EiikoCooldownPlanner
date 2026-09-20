@@ -223,10 +223,20 @@ function ST.Parse(str)
                 if not n then break end
                 talents[#talents + 1] = n
             end
+            -- 8e champ (optionnel, PLAN_FORMAT.md §9) : itemID des TRINKETS equipes. C'est
+            -- ce qui rend un trinket du toolkit (Vessel) resoluble : il ne depend pas des
+            -- talents. Un client d'avant ce champ ne lisait que f[7] -> il l'ignore.
+            local items = {}
+            for _, it in ipairs(splitList(f[8])) do
+                local n = num(it, "r (item)", i)
+                if not n then break end
+                items[#items + 1] = n
+            end
             if id and id ~= "" then
                 p.roster[#p.roster + 1] = { id = id, role = (role or ""):upper(),
                                             class = (class or ""):upper(), specID = specID,
-                                            spec = spec or "", talents = talents, line = i }
+                                            spec = spec or "", talents = talents, items = items,
+                                            line = i }
             end
         elseif t == "u" then
             local u = {
@@ -307,12 +317,19 @@ end
 --     ne passe PAS par le controle de classe des lignes u;, et Vampiric Embrace n'a
 --     aucun talentReq -> sans ce filtre, un roster annoncant la spe "Shadow" sur une
 --     autre classe le ferait declarer comme external du groupe ;
---   * trinkets exclus : ils dependent de l'equipement, que le format ne transporte pas.
-local function CandidatesFor(idx, sid, isHealer, spec, class)
+--   * trinkets : admis SEULEMENT si le roster declare l'objet EQUIPE (`items`, 8e champ de
+--     r;) -- ils n'ont ni talentReq ni talentNot, MatchTalentVariant les accorderait a
+--     n'importe qui. Cote heal, tout trinket declare est admis (token "@heal") ; cote
+--     external, seul un trinket `external` (aucun aujourd'hui : Vessel est healer-only).
+local function CandidatesFor(idx, sid, isHealer, spec, class, items)
     local out = {}
     for _, key in ipairs(idx[sid] or {}) do
         local d = HR.defensives[key]
-        if d and not d.trinket then
+        if d and d.trinket then
+            if items and d.itemId and items[d.itemId] and (isHealer or d.external) then
+                out[#out + 1] = key
+            end
+        elseif d then
             local healSide = (d.role == "HEALER")
             if healSide == isHealer
                and (not d.spec  or d.spec  == spec)
@@ -324,9 +341,21 @@ local function CandidatesFor(idx, sid, isHealer, spec, class)
     return out
 end
 
+-- Set { spellID = rang } des talents d'une identite de roster. Un talent a PLUSIEURS points
+-- s'ecrit en REPETANT son id dans la liste (`1241511,1241511` = rang 2, PLAN_FORMAT.md §11.8) :
+-- la seule forme qu'un client ANCIEN accepte (un suffixe `id:2` ferait echouer `num()` dans
+-- Parse -> import entier rejete ; le doublon, lui, est lu comme rang 1 = degradation douce).
+-- Meme forme que HR.GetLocalActiveTalents.
 local function TalentSet(r)
     local set = {}
-    for _, sid in ipairs(r.talents or {}) do set[sid] = true end
+    for _, sid in ipairs(r.talents or {}) do set[sid] = (set[sid] or 0) + 1 end
+    return set
+end
+
+-- Set { itemID = true } des trinkets EQUIPES declares par une identite de roster (8e champ).
+local function ItemSet(r)
+    local set = {}
+    for _, iid in ipairs(r.items or {}) do set[iid] = true end
     return set
 end
 
@@ -469,9 +498,9 @@ function ST.Resolve(p, opts)
     end
     for _, r in ipairs(p.roster) do
         if r.id ~= p.healer then
-            local tset = TalentSet(r)
+            local tset, iset = TalentSet(r), ItemSet(r)
             for sid in pairs(extSpellIDs) do
-                local key = HR.MatchTalentVariant(CandidatesFor(idx, sid, false, r._spec, r._class), tset)
+                local key = HR.MatchTalentVariant(CandidatesFor(idx, sid, false, r._spec, r._class, iset), tset)
                 if key then
                     externals[key] = (externals[key] or 0) + 1
                     carrierIdx[key] = carrierIdx[key] or {}
@@ -482,16 +511,17 @@ function ST.Resolve(p, opts)
     end
 
     -- (4) talentSpells du heal ----------------------------------------------
-    -- ⚠️ Les TRINKETS sont exclus : GetHealerTalentSpells les inclut volontairement
-    -- (toolkit heal), mais ils n'ont ni talentReq ni talentNot -> MatchTalentVariant
-    -- les accorderait a n'importe qui, meme avec zero talent. Ils dependent de
-    -- l'equipement, que le format ne transporte pas (cf. PLAN_FORMAT.md §12) : les
-    -- accorder ici ferait apparaitre un token "@heal" fantome dans le picker et
-    -- gonflerait VariantExternalCount pour un trinket que le heal n'a jamais porte.
-    local htset = TalentSet(hr)
+    -- ⚠️ Les TRINKETS ne passent PAS par MatchTalentVariant : GetHealerTalentSpells les
+    -- inclut (toolkit heal) mais ils n'ont ni talentReq ni talentNot -> il les accorderait
+    -- a n'importe qui, meme avec zero talent. Ils se resolvent par l'EQUIPEMENT declare
+    -- (`items`, 8e champ de r;), exactement comme Discover le fait avec HR.HasTrinket :
+    -- present -> la 1re (et seule) variante ; absent ou champ omis -> rien, comme avant.
+    local htset, hitems = TalentSet(hr), ItemSet(hr)
     local talentSpells = {}
     for _, sp in ipairs(HR.GetHealerTalentSpells(healerKey)) do
-        if not sp.trinket then
+        if sp.trinket then
+            if sp.itemId and hitems[sp.itemId] then talentSpells[sp.spellID] = sp.variants[1] end
+        else
             local key = HR.MatchTalentVariant(sp.variants, htset)
             if key then talentSpells[sp.spellID] = key end
         end
@@ -546,8 +576,11 @@ function ST.Resolve(p, opts)
                 fail("Line %d: %s cannot cast %s (%s only).",
                      u.line, Who(caster), DefName(all[1]), d0.class)
             else
-                local cands = CandidatesFor(idx, u.defSpell, isHealer, caster._spec, caster._class)
-                if #cands == 0 then
+                local cands = CandidatesFor(idx, u.defSpell, isHealer, caster._spec, caster._class, ItemSet(caster))
+                if #cands == 0 and d0.trinket then
+                    fail("Line %d: %s does not declare %s as equipped (r; items field).",
+                         u.line, Who(caster), DefName(all[1]))
+                elseif #cands == 0 then
                     fail("Line %d: %s cannot provide %s with that specialization.",
                          u.line, Who(caster), DefName(all[1]))
                 else
@@ -556,7 +589,9 @@ function ST.Resolve(p, opts)
                         fail("Line %d: no cooldown variant of %s matches the talents of %s "
                              .. "(incomplete talent list?).", u.line, DefName(all[1]), Who(caster))
                     elseif isHealer then
-                        token = tostring(key)
+                        -- Trinket porte par le HEAL : token suffixe "@heal" (Core/Plan2.lua,
+                        -- GetPlaceableDefsFor / IsTokenPlaceable), distinct du meme objet chez un DPS.
+                        token = tostring(key) .. (HR.defensives[key].trinket and "@heal" or "")
                     else
                         local n = (externals[key] or 0)
                         local i = carrierIdx[key] and carrierIdx[key][caster.id]
@@ -630,6 +665,8 @@ function ST.ValidateAgainstVariant(resolved, variant)
                 why = "unknown to the addon"
             elseif t.token:find("#") then
                 why = "the variant does not declare that many copies of it"
+            elseif t.token:find("@heal", 1, true) then
+                why = "the variant's healer does not carry that trinket"
             elseif HR.defensives[key].role == "HEALER" then
                 why = "the variant's healer does not play that cooldown variant"
             else

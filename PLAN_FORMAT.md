@@ -135,7 +135,7 @@ ecp;2;<kind>                 enveloppe        OBLIGATOIRE, première ligne
 z;<zoneID>                   donjon           OBLIGATOIRE si kind=variant
 b;<encID>                    boss ciblé       OBLIGATOIRE si kind=boss
 n;<titre>                    titre proposé    optionnel
-r;<id>;<rôle>;<classe>;<specID>;<spé>;<talent>,…   roster       1 ligne par joueur
+r;<id>;<rôle>;<classe>;<specID>;<spé>;<talent>,…[;<itemID>,…]   roster   1 ligne par joueur
 h;<id>                       le soigneur      OBLIGATOIRE
 u;<encID>;<bossSpell>;<n>;<id>;<defSpell>[;<offsetMs>]       assignation, 1 ligne
 k;<n>                        nombre de lignes u;   optionnel, fortement recommandé
@@ -161,7 +161,7 @@ détermine la numérotation des instances (§11.2).
 
 | Champ | Forme attendue |
 |---|---|
-| `zoneID`, `encID`, `bossSpell`, `defSpell`, `talent` | entiers décimaux |
+| `zoneID`, `encID`, `bossSpell`, `defSpell`, `talent`, `itemID` | entiers décimaux |
 | `n` (numéro d'occurrence) | entier ≥ 1 |
 | `offsetMs` | entier signé, millisecondes, borné à ±12000 par l'addon |
 | `classe` | jeton majuscule sans espace : `DEATHKNIGHT`, `DEMONHUNTER`, `PRIEST`, `EVOKER`… |
@@ -389,7 +389,7 @@ Purement indicatif. Pour un import de variante, l'addon **demande le nom à
 l'utilisateur** et se contente de préremplir le champ avec cette valeur. Ne comptez pas
 dessus pour identifier quoi que ce soit.
 
-### `r;<id>;<rôle>;<classe>;<specID>;<spé>;<talents>` — le roster
+### `r;<id>;<rôle>;<classe>;<specID>;<spé>;<talents>[;<items>]` — le roster
 
 Un joueur du groupe. C'est **la ligne la plus importante du format** : elle alimente
 toute la résolution du §10.
@@ -406,7 +406,12 @@ toute la résolution du §10.
 - `spé` — nom anglais de la spécialisation. Redondant avec `specID`, sert de repli si
   celui-ci est inconnu de l'addon (nouvelle spé).
 - `talents` — liste de spellID. Elle doit être **complète** : l'absence d'un talent est
-  une information (§11.1).
+  une information (§11.1). Un talent à **plusieurs points** s'écrit en **répétant son
+  spellID autant de fois que de points** (§11.8) : `1241511,1241511` = rang 2.
+- `items` — **optionnel**, 8ᵉ champ : liste d'**itemID** des **trinkets équipés** (slots 13
+  et 14). C'est ce qui rend un trinket du toolkit résoluble — il ne dépend pas des talents
+  mais de l'équipement (§11.9). Champ absent ou vide = aucun trinket déclaré. Un client
+  antérieur à ce champ l'ignore (il ne lisait que le 7ᵉ).
 
 Un joueur qui n'apparaît dans aucune ligne `u;` a toute sa place dans le roster : il
 contribue aux externals disponibles du groupe (§10, étape 5).
@@ -451,7 +456,8 @@ vos données doivent être ce qu'elles sont**. Chaque étape ci-dessous peut éc
 chaque échec produit un rejet visible par l'utilisateur.
 
 **1. Le roster devient des ensembles de talents.**
-Chaque ligne `r;` donne un ensemble `{ spellID → présent }`.
+Chaque ligne `r;` donne un ensemble `{ spellID → rang }`, le rang étant le nombre
+d'occurrences du spellID dans la liste (1 pour un talent à un point, §11.8).
 
 **2. `h;` devient un profil de heal.**
 `specID` → classe + spé → `PRIEST_HOLY`, `MONK`, `SHAMAN`… Si le rôle du joueur désigné
@@ -466,13 +472,18 @@ Exemple : `defSpell = 740` lancé par un druide.
 - talents contenant `740` mais pas `197073` → `740:0`, cooldown **180 s**
 - talents contenant `740` **et** `197073` → `740:1`, cooldown **150 s**
 
+Quelques sorts ont **trois** variantes, départagées par le **rang** d'un talent à deux
+points (*Avenging Wrath* : `31884:0` sans `1241511`, `31884:1` au rang 1, `31884:2` au
+rang 2). Le rang vient de la répétition du spellID dans la liste (§11.8).
+
 Aucune variante ne correspond → **écart rapporté**, jamais de choix par défaut
 silencieux. Le cas typique est une liste de talents incomplète.
 
 **4. Les talents du soigneur deviennent son arsenal.**
 L'addon parcourt tous les défensifs de soin de son profil et retient ceux que ses
 talents rendent disponibles. C'est ce qui alimente les propositions de l'éditeur de plan
-et le calcul de disponibilité.
+et le calcul de disponibilité. Les **trinkets** du toolkit ne passent pas par les talents :
+ils sont retenus si leur `itemID` figure dans le champ `items` du soigneur (§11.9).
 
 **5. Les talents des autres deviennent les externals du groupe.**
 Ils sont dérivés du **roster**, pas des assignations : un Death Knight qui a AMZ le
@@ -550,6 +561,9 @@ catégories que l'addon range et affiche différemment.
 Le seul discriminant est `h;` : si le lanceur est le soigneur désigné, c'est un CD de
 soin. C'est l'une des raisons pour lesquelles `h;` est obligatoire.
 
+*Poison Cleansing Totem* (`383013`, talent de classe du Chaman) suit exactement la même
+règle : external chez un Chaman DPS, CD de soin chez le Chaman Restauration désigné.
+
 ### 11.5 Le numéro d'occurrence est un rang, pas un horaire
 
 `n=3` signifie « la troisième fois que cette capacité est lancée », dans la timeline que
@@ -579,6 +593,49 @@ Ce n'est pas un bug ; les données n'ont réellement pas cours.
 
 ---
 
+### 11.8 Un talent à plusieurs points se répète
+
+La liste `talents` ne porte que des spellID. Or certains talents s'achètent en **deux
+points**, et c'est le **nombre de points** qui fixe le cooldown : *Call of the Righteous*
+(`1241511`) retire 15 s par point à *Avenging Wrath* (120 / 105 / 90 s) et 12,5 % par point
+à *Avenging Crusader* (60 / 52,5 / 45 s).
+
+Convention : **répétez le spellID autant de fois que de points** — `31884,1241511,1241511`
+pour un Paladin Sacré au rang 2. L'addon compte les occurrences ; un spellID présent une
+fois vaut rang 1, ce qui ne change rien pour tous les talents à un point.
+
+Pourquoi pas un suffixe (`1241511:2`) ? Parce qu'un client qui ne connaît pas cette
+convention lit chaque talent comme un nombre et **rejette l'import entier** sur un
+`1241511:2` (« invalid number for r (talent) »). Une répétition, elle, est inoffensive
+pour un ancien client : il voit le talent une fois → rang 1, résolution dégradée (1:45
+au lieu de 1:30) mais import accepté et cohérent. Le générateur JavaScript de référence
+(§16) émet la liste telle qu'il la reçoit : c'est au producteur de dupliquer l'id.
+
+### 11.9 Un trinket se déclare par son itemID, pas par un talent
+
+*Soulcoiler Ritual Vessel* (`defSpell` **1291894**, itemID **270162**) est un CD du toolkit
+soigneur qui ne vient d'aucun talent : sa présence dépend de l'**équipement**. Le format le
+transporte via le 8ᵉ champ de `r;` (§9) :
+
+```
+r;p4;HEALER;MONK;270;Mistweaver;101643,107428,…;270162
+u;3456;1296220;2;p4;1291894;-1000
+```
+
+Règles de résolution :
+
+- une ligne `u;` dont le `defSpell` est un trinket est **rejetée** si le lanceur ne le
+  déclare pas dans `items` (« does not declare … as equipped ») — même logique que les
+  talents : l'absence est une information ;
+- déclaré par le **soigneur** (`h;`), le trinket entre dans son arsenal et l'assignation
+  devient le token `1291894@heal` côté addon ;
+- déclaré par un **non-soigneur**, il n'est retenu que si l'addon le connaît comme
+  external — ce n'est le cas d'**aucun** trinket aujourd'hui (Vessel est réservé au
+  soigneur) : une telle ligne `u;` est rejetée (« cannot provide »).
+
+Côté producteur : n'émettez que les trinkets **connus de l'addon** (§14.3) — les autres
+sont ignorés sans erreur, mais alourdissent la ligne pour rien.
+
 ## 12. Ce que le format ne peut pas exprimer
 
 **Les appels génériques.** L'addon connaît trois pseudo-défensifs sans spellID :
@@ -586,10 +643,6 @@ Ce n'est pas un bug ; les données n'ont réellement pas cours.
 (tout lâcher) et « Ramp » (préparation de soin). Ils ne sont pas représentables, par
 choix : le format ne transporte que de vrais sorts. Ces annotations restent posées à la
 main dans l'addon — et sont donc **effacées** par un import de boss (§11.6).
-
-**Les trinkets.** Un objet du toolkit soigneur (*Soulcoiler Ritual Vessel*) ne se résout
-pas par les talents mais par l'équipement, que le format ne transporte pas. À poser à la
-main.
 
 **Les compositions sans soigneur.** `h;` est obligatoire.
 
@@ -709,6 +762,7 @@ vous ne les remontez pas, la résolution échoue ou se trompe (§11.1).
 | 374227 | Zephyr | EVOKER | 120 s | 374227 · cf. §11.4 |
 | 15286 | Vampiric Embrace | PRIEST | 120 s | aucun — spé **Shadow** requise |
 | 97462 | Rallying Cry | WARRIOR | 180 s | 97462 |
+| 383013 | Poison Cleansing Totem | SHAMAN | 120 s | 383013 · même ambiguïté que Zephyr, cf. §11.4 |
 
 **CD de soin** — fournis par le joueur désigné par `h;`
 
@@ -720,7 +774,7 @@ vous ne les remontez pas, la résolution échoue ou se trompe (§11.1).
 | 132158 | Nature's Swiftness *(druide)* | DRUID | 60 s / 45 s | 132158, 382550 |
 | 359816 | Dream Flight | EVOKER | 120 s | 359816 |
 | 370537 | Stasis | EVOKER | 90 s | 370537 |
-| 363534 | Rewind | EVOKER | 180 s / 120 s | 363534, 381922 |
+| 363534 | Rewind | EVOKER | 240 s / 180 s | 363534, 381922 |
 | 374227 | Zephyr | EVOKER | 120 s | 374227 · cf. §11.4 |
 | 115310 | Revival | MONK | 180 s | 115310 |
 | 388615 | Restoral | MONK | 180 s | 388615 |
@@ -728,8 +782,9 @@ vous ne les remontez pas, la résolution échoue ou se trompe (§11.1).
 | 322118 | Invoke Yu'lon | MONK | 60 s / 120 s | 322118, 388212 |
 | 325197 | Invoke Chi-Ji | MONK | 60 s / 120 s | 325197, 388212 |
 | 31821 | Aura Mastery | PALADIN | 180 s / 150 s | 31821, 392911 |
-| 31884 | Avenging Wrath | PALADIN | 120 s / 105 s | 31884, 1241511 |
-| 216331 | Avenging Crusader | PALADIN | 120 s / 105 s | 216331, 1241511 |
+| 200025 | Beacon of Virtue | PALADIN | 15 s | 200025 |
+| 31884 | Avenging Wrath | PALADIN | 120 s / 105 s / 90 s | 31884, 1241511 (×1 ou ×2, §11.8) |
+| 216331 | Avenging Crusader | PALADIN | 60 s / 52,5 s / 45 s | 216331, 1241511 (×1 ou ×2, §11.8) |
 | 375576 | Divine Toll | PALADIN | 45 s / 30 s | 375576, 379391 |
 | 114165 | Holy Prism | PALADIN | 45 s / 30 s | 114165, 379391 |
 | 64843 | Divine Hymn | PRIEST Holy | 180 s / 120 s | 64843, 419110 |
@@ -743,6 +798,8 @@ vous ne les remontez pas, la résolution échoue ou se trompe (§11.1).
 | 108280 | Healing Tide Totem | SHAMAN | 120 s / 180 s | 108280, 462440 |
 | 378081 | Nature's Swiftness *(chaman)* | SHAMAN | 60 s | **absence** de 443454 |
 | 443454 | Ancestral Swiftness | SHAMAN | 30 s | 443454 |
+| 383013 | Poison Cleansing Totem | SHAMAN | 120 s | 383013 · cf. §11.4 |
+| 1291894 | Soulcoiler Ritual Vessel *(trinket)* | tout soigneur | 120 s | **itemID 270162** dans `items`, cf. §11.9 |
 
 Certains sorts sont mutuellement exclusifs par choix de talent — Yu'lon **ou** Chi-Ji,
 Ascendance **ou** Healing Tide Totem, Restoral **ou** Revival, Ultimate Penitence **ou**
@@ -871,6 +928,7 @@ export function decodePlan(text) {
                   specID:  f[4] ? num(f[4], 'specID') : undefined,
                   spec:    dec(f[5]),
                   talents: (f[6] || '').split(',').filter(Boolean).map(t => num(t, 'talent')),
+                  items:   (f[7] || '').split(',').filter(Boolean).map(t => num(t, 'item')),
                 }); break;
 
       case 'u': {
@@ -916,7 +974,8 @@ export function encodePlan(p) {
 
   for (const r of p.roster)
     L.push(['r', enc(r.id), enc(r.role), enc(r.class),
-            r.specID ?? '', enc(r.spec), (r.talents || []).join(',')].join(';'));
+            r.specID ?? '', enc(r.spec), (r.talents || []).join(','),
+            (r.items || []).join(',')].join(';').replace(/;$/, ''));   // items vide ⇒ champ omis
 
   L.push('h;' + enc(p.healer));
 
@@ -948,6 +1007,8 @@ Le **vecteur de référence** est l'exemple du §15.
 - [ ] type de ligne inconnu ignoré sans erreur
 - [ ] champ surnuméraire en fin de ligne connue ignoré
 - [ ] `offsetMs` absent ⇒ pas de champ `offset` dans l'objet ; présent et négatif ⇒ conservé
+- [ ] `r;` à 7 champs (sans `items`) ⇒ `items` vide, aucune erreur
+- [ ] un talent répété deux fois est conservé deux fois (rang, §11.8), jamais dédupliqué
 
 **Encodage**
 
@@ -956,6 +1017,7 @@ Le **vecteur de référence** est l'exemple du §15.
 - [ ] un `id` de la forme `p1-alt_2` reste lisible, `-` et `_` non échappés
 - [ ] `specID` vide (champ omis) accepté, la classe et la spé transmises font foi
 - [ ] `offset` nul non émis
+- [ ] `items` vide ⇒ 8ᵉ champ omis (pas de `;` final) ; non vide ⇒ émis
 - [ ] encodage déterministe : deux objets aux mêmes données produisent la même chaîne
 - [ ] roster émis dans l'ordre fourni, jamais retrié (§11.2)
 

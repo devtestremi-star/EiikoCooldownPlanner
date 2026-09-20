@@ -841,33 +841,10 @@ local function groupUnits()
     return u
 end
 
--- Talents ACTIFS du joueur local : set { spellID = true }. Sert a deviner la variante
--- de CD (ex. AMZ 3 min talente vs 4 min base). Hors combat/donjon, le loadout de talents
--- est generalement lisible (a confirmer en jeu ; cf. docs/EiikoCooldownPlanner/external-scan.md). Tout est
--- garde defensivement : APIs absentes -> set vide -> on retombe sur le defaut.
-function HR.GetLocalActiveTalents()
-    local set = {}
-    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_Traits) then return set end
-    local cfgID = C_ClassTalents.GetActiveConfigID()
-    if not cfgID then return set end
-    local cfg = C_Traits.GetConfigInfo(cfgID)
-    if not cfg or not cfg.treeIDs then return set end
-    for _, treeID in ipairs(cfg.treeIDs) do
-        for _, nodeID in ipairs(C_Traits.GetTreeNodes(treeID) or {}) do
-            local node = C_Traits.GetNodeInfo(cfgID, nodeID)
-            if node and node.activeEntry and (node.activeEntry.rank or 0) > 0 then
-                local entry = C_Traits.GetEntryInfo(cfgID, node.activeEntry.entryID)
-                if entry and entry.definitionID then
-                    local def = C_Traits.GetDefinitionInfo(entry.definitionID)
-                    if def and def.spellID then set[def.spellID] = true end
-                end
-            end
-        end
-    end
-    return set
-end
-
--- Set { spellID=true } des talents actifs d'un config de traits (local OU inspect).
+-- Set { spellID = rank } des talents actifs d'un config de traits (local OU inspect).
+-- La VALEUR est le rang achete (1 pour un talent a un point) : truthy, donc tout test
+-- `if tset[id]` reste valable ; seul `talentRank` (Data/Defensives.lua) lit le nombre, pour
+-- les talents a plusieurs points (Call of the Righteous 1241511 : rang 1 vs rang 2).
 local function talentSetFromConfig(cfgID)
     local set = {}
     if not (C_Traits and cfgID) then return set end
@@ -876,16 +853,27 @@ local function talentSetFromConfig(cfgID)
     for _, treeID in ipairs(cfg.treeIDs) do
         for _, nodeID in ipairs(C_Traits.GetTreeNodes(treeID) or {}) do
             local node = C_Traits.GetNodeInfo(cfgID, nodeID)
-            if node and node.activeEntry and (node.activeEntry.rank or 0) > 0 then
+            local rank = node and node.activeEntry and (node.activeEntry.rank or 0) or 0
+            if rank > 0 then
                 local entry = C_Traits.GetEntryInfo(cfgID, node.activeEntry.entryID)
                 if entry and entry.definitionID then
                     local def = C_Traits.GetDefinitionInfo(entry.definitionID)
-                    if def and def.spellID then set[def.spellID] = true end
+                    if def and def.spellID then set[def.spellID] = rank end
                 end
             end
         end
     end
     return set
+end
+
+-- Talents ACTIFS du joueur local : set { spellID = rank } (cf. talentSetFromConfig). Sert a
+-- deviner la variante de CD (ex. AMZ 3 min talente vs 4 min base). Hors combat/donjon, le
+-- loadout de talents est generalement lisible (a confirmer en jeu ; cf.
+-- docs/EiikoCooldownPlanner/external-scan.md). Tout est garde defensivement : APIs absentes
+-- -> set vide -> on retombe sur le defaut.
+function HR.GetLocalActiveTalents()
+    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_Traits) then return {} end
+    return talentSetFromConfig(C_ClassTalents.GetActiveConfigID())
 end
 
 -- Sorts du HEALER (profil) lies a un talent. Inclut les sorts a UNE variante (toggle
@@ -926,8 +914,9 @@ function HR.GetHealerTalentSpells(profileKey)
     return out
 end
 
--- Parmi des cles de variante, celle dont TOUS les talentReq sont dans `tset` et AUCUN
--- talentNot ; nil si aucune ne matche.
+-- Parmi des cles de variante, celle dont TOUS les talentReq sont dans `tset`, AUCUN
+-- talentNot, et chaque talentRank au rang EXACT (`tset[id]` = rang, cf. talentSetFromConfig ;
+-- un set qui porterait encore `true` compte pour 1) ; nil si aucune ne matche.
 function HR.MatchTalentVariant(keys, tset)
     for _, key in ipairs(keys) do
         local d = HR.defensives[key]
@@ -935,6 +924,13 @@ function HR.MatchTalentVariant(keys, tset)
             local ok = true
             if d.talentReq then for _, t in ipairs(d.talentReq) do if not tset[t] then ok = false; break end end end
             if ok and d.talentNot then for _, t in ipairs(d.talentNot) do if tset[t] then ok = false; break end end end
+            if ok and d.talentRank then
+                for t, rank in pairs(d.talentRank) do
+                    local have = tset[t]
+                    if have == true then have = 1 end
+                    if (tonumber(have) or 0) ~= rank then ok = false; break end
+                end
+            end
             if ok then return key end
         end
     end

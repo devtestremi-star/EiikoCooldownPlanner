@@ -16,6 +16,14 @@ local addonName, HR = ...
 -- (reduction par talent) => cle "spellID:0" / "spellID:1" + champ spellID (icone/tooltip).
 --   talentReq = { spellID, ... } : TOUS doivent etre actifs.
 --   talentNot = { spellID, ... } : AUCUN ne doit etre actif.
+--   talentRank = { [spellID] = n } : le talent doit etre a EXACTEMENT ce rang (talent a
+--     plusieurs points, ex. Call of the Righteous 1241511 : rang 1 = -15 s, rang 2 = -30 s).
+--     Le set de talents porte le rang comme valeur ({ [spellID] = rank }, cf. Plan2.lua).
+--   noSync = true : sort de GESTION du healer (court, tres repete, sans interet pour le groupe).
+--     Placable dans le plan comme les autres, mais il ne TRANSITE PAS par le Sync (filtre a
+--     l'emission ET a la reception, Core/Share.lua StripNoSync / Core/Sync/PlanSync.lua).
+--     Export, catalogue et Packager le transportent normalement. Decide par le flag, jamais
+--     par placement. Aucun sort flagge pour l'instant (liste a venir).
 -- (Matching par membre = a brancher dans ScanGroupExternals ; cf. note.)
 HR.defensives = {
     ----------------------------------------------------------------------------
@@ -32,6 +40,11 @@ HR.defensives = {
     ["374227:heal"] = { name = "Zephyr",                cooldown = 120, class = "EVOKER", role = "HEALER", aoeOnly = true, short = "Zeph", spellID = 374227, talentReq = { 374227 } },
     [15286]       = { name = "Vampiric Embrace",        cooldown = 120, class = "PRIEST", spec = "Shadow", short = "Vamp", external = true },
     [97462]       = { name = "Rallying Cry",            cooldown = 180, class = "WARRIOR", short = "Rally", external = true, talentReq = { 97462 } },
+    -- Poison Cleansing Totem : talent de CLASSE (meme spellID que le sort), toute spe de shaman.
+    -- Meme schema que Zephyr : porte par un Shaman DPS (external, role DAMAGER) OU par le heal
+    -- Resto (entree ":heal", role HEALER, dans son toolkit). Pas de macro EHP_ (decision).
+    [383013]      = { name = "Poison Cleansing Totem",  cooldown = 120, class = "SHAMAN", role = "DAMAGER", short = "PCT", external = true, talentReq = { 383013 } },
+    ["383013:heal"] = { name = "Poison Cleansing Totem", cooldown = 120, class = "SHAMAN", role = "HEALER", short = "PCT", spellID = 383013, talentReq = { 383013 } },
     -- Trinket HEALER-ONLY : `trinket = true` SANS `external` => propose uniquement dans le toolkit
     -- healer (HR.GetHealerTalentSpells) via token "@heal", jamais dans les externals raid.
     [1291894]     = { name = "Soulcoiler Ritual Vessel", cooldown = 120, itemId = 270162, icon = 7956752, short = "Vessel", trinket = true },
@@ -64,11 +77,17 @@ HR.defensives = {
     -- Paladin
     ["31821:0"]   = { name = "Aura Mastery (3 min)",    cooldown = 180, class = "PALADIN", role = "HEALER", short = "Aura", spellID = 31821, talentReq = { 31821 }, talentNot = { 392911 } },
     ["31821:1"]   = { name = "Aura Mastery (2 min 30)", cooldown = 150, class = "PALADIN", role = "HEALER", short = "Aura", spellID = 31821, talentReq = { 31821, 392911 } },
+    -- Beacon of Virtue : talent au MEME spellID que le sort, CD court (15 s), sort de gestion.
+    [200025]      = { name = "Beacon of Virtue",        cooldown = 15,  class = "PALADIN", role = "HEALER", short = "BoV", talentReq = { 200025 } },
     -- choiceNode = 5 : Avenging Wrath et Avenging Crusader sont un CHOIX de talent.
+    -- Call of the Righteous (1241511) a DEUX rangs : -15 s par rang sur AW (2 min de base) et
+    -- -12,5 % par rang sur AC (1 min de base) -> 3 variantes chacun, departagees par talentRank.
     ["31884:0"]   = { name = "Avenging Wrath (2 min)",  cooldown = 120, class = "PALADIN", role = "HEALER", short = "AW", spellID = 31884, choiceNode = 5, talentReq = { 31884 }, talentNot = { 1241511 } },
-    ["31884:1"]   = { name = "Avenging Wrath (1 min 45)", cooldown = 105, class = "PALADIN", role = "HEALER", short = "AW", spellID = 31884, choiceNode = 5, talentReq = { 31884, 1241511 } },
-    ["216331:0"]  = { name = "Avenging Crusader (1 min)", cooldown = 120, class = "PALADIN", role = "HEALER", short = "AC", spellID = 216331, choiceNode = 5, talentReq = { 216331 }, talentNot = { 1241511 } },
-    ["216331:1"]  = { name = "Avenging Crusader (52,5 sec)", cooldown = 105, class = "PALADIN", role = "HEALER", short = "AC", spellID = 216331, choiceNode = 5, talentReq = { 216331, 1241511 } },
+    ["31884:1"]   = { name = "Avenging Wrath (1 min 45)", cooldown = 105, class = "PALADIN", role = "HEALER", short = "AW", spellID = 31884, choiceNode = 5, talentReq = { 31884, 1241511 }, talentRank = { [1241511] = 1 } },
+    ["31884:2"]   = { name = "Avenging Wrath (1 min 30)", cooldown = 90,  class = "PALADIN", role = "HEALER", short = "AW", spellID = 31884, choiceNode = 5, talentReq = { 31884, 1241511 }, talentRank = { [1241511] = 2 } },
+    ["216331:0"]  = { name = "Avenging Crusader (1 min)", cooldown = 60,  class = "PALADIN", role = "HEALER", short = "AC", spellID = 216331, choiceNode = 5, talentReq = { 216331 }, talentNot = { 1241511 } },
+    ["216331:1"]  = { name = "Avenging Crusader (52,5 sec)", cooldown = 52.5, class = "PALADIN", role = "HEALER", short = "AC", spellID = 216331, choiceNode = 5, talentReq = { 216331, 1241511 }, talentRank = { [1241511] = 1 } },
+    ["216331:2"]  = { name = "Avenging Crusader (45 sec)", cooldown = 45,  class = "PALADIN", role = "HEALER", short = "AC", spellID = 216331, choiceNode = 5, talentReq = { 216331, 1241511 }, talentRank = { [1241511] = 2 } },
     -- choiceNode = 8 : Divine Toll et Holy Prism sont un CHOIX de talent (un seul des deux).
     -- Le talent porte le MEME spellID que le sort -> talentReq = le sort lui-meme.
     -- Les DEUX sont reduits de 15 s par le talent 379391 : 45 s de base, 30 s avec.
@@ -107,8 +126,9 @@ HR.defensives = {
     -- choiceNode = 3 : Stasis et Dream Flight sont un CHOIX de talent (un seul des deux).
     [370537]      = { name = "Stasis",                 cooldown = 90,  class = "EVOKER", role = "HEALER", short = "Sta", choiceNode = 3, talentReq = { 370537 } },
     [359816]      = { name = "Dream Flight",           cooldown = 120, class = "EVOKER", role = "HEALER", short = "DF", choiceNode = 3, talentReq = { 359816 } },
-    ["363534:0"]  = { name = "Rewind (3 min)",         cooldown = 180, class = "EVOKER", role = "HEALER", short = "Rew", spellID = 363534, talentReq = { 363534 }, talentNot = { 381922 } },
-    ["363534:1"]  = { name = "Rewind (2 min)",         cooldown = 120, class = "EVOKER", role = "HEALER", short = "Rew", spellID = 363534, talentReq = { 363534, 381922 } },
+    -- Rewind : 4 min de base, 3 min avec le talent 381922 (cles :0/:1 heritees, inchangees).
+    ["363534:0"]  = { name = "Rewind (4 min)",         cooldown = 240, class = "EVOKER", role = "HEALER", short = "Rew", spellID = 363534, talentReq = { 363534 }, talentNot = { 381922 } },
+    ["363534:1"]  = { name = "Rewind (3 min)",         cooldown = 180, class = "EVOKER", role = "HEALER", short = "Rew", spellID = 363534, talentReq = { 363534, 381922 } },
 
     ----------------------------------------------------------------------------
     -- GENERIQUES (appels de CD perso / tout lacher) -- inchanges
@@ -207,7 +227,14 @@ function HR.GetDefensiveIcon(key)
         return C_Item.GetItemIconByID(d.itemId) or FALLBACK_ICON
     end
     local realID = HR.GetDefensiveSpellID(key)
-    return (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(realID)) or FALLBACK_ICON
+    if not (C_Spell and C_Spell.GetSpellTexture) then return FALLBACK_ICON end
+    -- ⚠️ Le 1er retour (iconID) suit les OVERRIDES du JOUEUR LOCAL : un Paladin qui a pris
+    -- Avenging Crusader voit AW (31884) rendu avec l'icone d'AC (216331 remplace 31884) -> les
+    -- deux sorts du meme choiceNode se confondaient dans la rangee talents. Meme piege pour
+    -- Chi-Ji/Yu'lon, Restoral/Revival, Ancestral/Nature's Swiftness. Nos cles designent un
+    -- sort PRECIS : on prend `originalIconID` (2e retour, icone du sort tel que demande).
+    local iconID, originalIconID = C_Spell.GetSpellTexture(realID)
+    return originalIconID or iconID or FALLBACK_ICON
 end
 
 -- Renvoie le fileID de l'icone d'un sort quelconque (capacite de boss).

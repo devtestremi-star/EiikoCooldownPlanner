@@ -1138,8 +1138,11 @@ end
 -- Tooltip custom (titre + corps DYNAMIQUE) sur un widget. getLines() -> title, body
 -- (le body peut expliquer pourquoi l'option est indisponible).
 local function BuildNewVariantModal()
+    -- Largeur 680 : la rangee de talents aligne CHAQUE variante (32 px + 8, 14 entre sorts) ;
+    -- Holy Paladin en compte 14 (AW x3, AC x3, Aura/Toll/Prism x2, Beacon, trinket Vessel)
+    -- = 636 px depuis x0=16 -> bord droit a 652. Debordait a 560, mordait encore a 600/640.
     local m = UI.Components.Window(UIParent, {
-        name = "ECPNewVariantModal", title = "New variant", width = 560, height = 500,
+        name = "ECPNewVariantModal", title = "New variant", width = 680, height = 500,
         bgTexture = (HR.Assets.registry["bg-variant"]) and HR.Asset("bg-variant") or nil,
     })
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)

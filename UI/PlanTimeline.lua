@@ -284,7 +284,11 @@ function UI.RenderPlanTimeline(boss)
             b:SetText(suffix and (short .. suffix) or short) -- shortname + #N si instance multiple
             -- OFFSET : label au-dessus du bouton correspondant (+ a droite / - a gauche).
             if off ~= 0 then
-                b.offLbl:SetText(("%+d"):format(off / 1000))
+                -- Secondes entieres -> "+2" ; sinon une decimale ("+0.9", "-1.5") : les offsets
+                -- venus du format web sont libres en ms, et "%+d" tronquait 900 ms en "+0"
+                -- alors que l'icone (et le runtime) etaient bien decales.
+                local secs = off / 1000
+                b.offLbl:SetText((off % 1000 == 0) and ("%+d"):format(secs) or ("%+.1f"):format(secs))
                 b.offLbl:ClearAllPoints()
                 b.offLbl:SetPoint("BOTTOM", off > 0 and b.nudgeR or b.nudgeL, "TOP", 0, 1)
                 b.offLbl:Show()

@@ -596,13 +596,15 @@ local content_1210 = {
                     { spellID = 1296220, name = "Triple Shot",    at = 8,  cast = 2, defMarker = { mode = "AFTER_CAST_END",   offset = -1000 }, allowedInPlan = true, allowInTimeline = true },
                     { spellID = 1296216, name = "Ssscavenging",   at = 22, cast = 0, defMarker = { mode = "AFTER_CAST_START", offset = 0 },     allowedInPlan = true, allowInTimeline = true },
                     { spellID = 1296220, name = "Triple Shot",    at = 44, cast = 2, defMarker = { mode = "AFTER_CAST_END",   offset = -1000 }, allowedInPlan = true, allowInTimeline = true },
-                    { spellID = 1296050, name = "Regurgitate",    at = 49, allowedInPlan = true, allowInTimeline = true },
+                    -- Regurgitate (+49) RETIRE de la phase (decision 2026-09-20) : plus dans le plan ni
+                    -- dans la timeline. Il ne survit qu'en entree duration-only ci-dessous, masquee,
+                    -- pour que sa duree serveur (13) reste reconnue et non affichee en live.
                 } },
             }, -- aucune duree partagee : chaque duree resout un sort unique (pas de durationGroups)
                 abilities = {
                     { spellID = 1296220, name = "Triple Shot",    durations = { 8, 24 } },
                     { spellID = 1296216, name = "Ssscavenging",   durations = { 25, 45 } },
-                    { spellID = 1296050, name = "Regurgitate",    durations = { 13 } },
+                    { spellID = 1296050, name = "Regurgitate",    durations = { 13 }, allowInTimeline = false }, -- EXCLURE
                     { spellID = 1307894, name = "Ravenous Stomp", durations = { 23 } },
                     { spellID = 1307703, name = "Fresh Meat" }, -- ENCOUNTER_WARNING, pas de duree serveur
                 },

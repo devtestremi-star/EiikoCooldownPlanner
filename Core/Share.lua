@@ -47,10 +47,12 @@ function Share.EncodeRaw(value)
 end
 
 -- Chaine d'export partageable d'une variante (MEME encodage que le Share : CBOR -> Deflate ->
--- Base64). Sert a l'export hors-groupe (copier/coller). nil si echec. `Share.BuildPayload` est
--- definie plus bas -> resolue a l'appel (runtime), pas a la definition.
-function Share.EncodeVariant(dungeonID, variant)
-    local payload = Share.BuildPayload(dungeonID, variant)
+-- Base64). Sert a l'export hors-groupe (copier/coller) ET a la poussee Sync. nil si echec.
+-- `opts` (optionnel) est transmis a BuildPayload : { stripNoSync = true } = poussee Sync (les
+-- sorts `noSync` restent chez le healer) ; sans opts = export/catalogue, plan complet.
+-- `Share.BuildPayload` est definie plus bas -> resolue a l'appel (runtime), pas a la definition.
+function Share.EncodeVariant(dungeonID, variant, opts)
+    local payload = Share.BuildPayload(dungeonID, variant, opts)
     if not payload then return nil end
     return Share.EncodeRaw(payload)
 end
@@ -101,12 +103,51 @@ local function IsKnownDungeon(dID)
     return false
 end
 
+-- Un token de defensif est-il flagge `noSync` (sort de GESTION du healer : court, tres repete,
+-- sans interet pour le groupe) ? Le flag vit sur l'entree HR.defensives, jamais sur le plan.
+local function isNoSync(token)
+    local d = HR.defensives[HR.DefKeyOf(token)]
+    return d and d.noSync == true
+end
+
+-- Recopie d'assignments SANS les tokens `noSync`. NOUVELLE table a chaque niveau (encounter,
+-- occurrence, liste) : la source -- `variant.assignments` cote emetteur -- n'est JAMAIS touchee
+-- (regle absolue sur les donnees sauvegardees). Les entrees gardees sont recopiees TELLES QUELLES
+-- (pas de normalisation : c'est le role de SanitizeAssignments, qui passe derriere). Une
+-- occurrence ou un boss vide apres filtrage n'est pas ecrit -> payload plus petit.
+-- Renvoie la copie et le nombre d'entrees retirees.
+function Share.StripNoSync(asg)
+    local out, dropped = {}, 0
+    if type(asg) ~= "table" then return out, 0 end
+    for encID, occs in pairs(asg) do
+        if type(occs) == "table" then
+            local encOut
+            for occKey, defs in pairs(occs) do
+                if type(defs) == "table" then
+                    local list = {}
+                    for _, e in ipairs(defs) do
+                        if isNoSync(HR.EntryToken(e)) then dropped = dropped + 1 else list[#list + 1] = e end
+                    end
+                    if #list > 0 then encOut = encOut or {}; encOut[occKey] = list end
+                end
+            end
+            if encOut then out[encID] = encOut end
+        end
+    end
+    return out, dropped
+end
+
 -- Construit le payload partageable d'une variante (format V2 : healer + externals + plan).
 -- NB : pour les boss multi-timelines (ex. L'ura), les plans des DEUX variantes sont DEJA
 -- dans `asg` (cles d'occurrence prefixees par la variante). On ajoute `tlv` = la variante
 -- JOUEE choisie par l'emetteur, par boss, pour la transmettre aussi.
-function Share.BuildPayload(dungeonID, variant)
+-- `opts.stripNoSync` (poussee Sync UNIQUEMENT, cf. Core/Sync/PlanSync.lua) : `asg` est une
+-- COPIE sans les tokens `noSync`. Sans opts (export, catalogue, Packager, BuildBossPayload) :
+-- `asg` = la table de la variante, plan complet, comportement inchange.
+function Share.BuildPayload(dungeonID, variant, opts)
     if not dungeonID or not variant then return nil end
+    local asg = variant.assignments
+    if opts and opts.stripNoSync then asg = Share.StripNoSync(asg) end
     local tlv
     for _, d in ipairs(HR.content) do
         if d.id == dungeonID then
@@ -126,7 +167,7 @@ function Share.BuildPayload(dungeonID, variant)
         healer = variant.healer,            -- profil de heal (jeton, ex. "MONK"/"PRIEST_HOLY")
         ext    = variant.externals,         -- { [defKey] = count } (externals de groupe)
         tsp    = variant.talentSpells,      -- { [spellID] = cle_de_variante_de_CD }
-        asg    = variant.assignments,       -- [encounterID][occKey] = { {token,offset}, ... }
+        asg    = asg,                       -- [encounterID][occKey] = { {token,offset}, ... }
         tlv    = tlv,                        -- [encounterID] = variante de timeline JOUEE
     }
 end
