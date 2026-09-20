@@ -38,6 +38,20 @@ local RETRY      = 0.25    -- periode de re-resolution tant que la barre n'est p
 local RECONCILE  = 1.5     -- tolerance (s) pour reconcilier avec une occurrence deja liee
 local STORE_KEY  = "eiiko:defs"
 
+-- SECRET VALUES (M+ / raid) : la barre du plugin Timeline de BigWigs porte le `spellName`
+-- SERVEUR de C_EncounterTimeline, et DBM peut faire de meme -> `text`, voire `key`, peuvent
+-- etre des Secret Values. `type()` et `tostring()` PASSENT dessus (on peut les AFFICHER),
+-- mais toute comparaison (`~= ""`, `<= 0`) ou tout usage comme cle de table LEVE une erreur,
+-- et comme le driver re-tente toutes les 0.25 s, une seule barre secrete = une erreur par
+-- tick pendant toute la cle. On ne garde donc que ce qui est REELLEMENT lisible ; une barre
+-- sans identite lisible ne peut se lier que par le niveau 1 (eventId), ce qui est
+-- precisement le cas de la barre Timeline.
+local function Readable(v)
+    if v == nil then return nil end
+    if issecretvalue and issecretvalue(v) then return nil end
+    return v
+end
+
 local function Enabled()
     -- GATE DE ZONE (imposee, pas une option) : hors d'un donjon de HR.content, l'addon est
     -- DORMANT. `Live()` ci-dessous le couvrait deja par EFFET DE BORD (pas d'etat runtime hors
@@ -85,6 +99,9 @@ end
 --      frequent ou BW et ECP n'utilisent pas le meme spellID pour la meme capacite (cast id
 --      vs damage id) : les deux affichent le meme nom.
 local function ResolvePlanId(s, key, text)
+    -- ceinture ET bretelles : l'intake filtre deja, mais une comparaison sur une Secret
+    -- Value est une erreur Lua, pas un simple faux -> on ne prend aucun risque ici.
+    key, text = Readable(key), Readable(text)
     if type(key) == "number" and key > 0 then
         -- le spellID BW n'est retenu que s'il existe vraiment dans notre plan
         for _, o in ipairs(s.planned) do
@@ -374,6 +391,8 @@ local function OnBigWigsBarCreated(_, _, bar, _, key, text, time)
     if not bar or not Enabled() then return end
     local s = Live()
     if not s then return end
+    -- Secret Values -> nil AVANT le moindre test (`key <= 0` leverait une erreur).
+    key, text = Readable(key), Readable(text)
     -- key negative = section Encounter Journal, key string = option nommee ("berserk",
     -- "stages"...) : aucun lien possible. Les barres du plugin Timeline ont key nil mais
     -- portent "bigwigs:eventId" -> on les laisse passer, le niveau 1 les traitera.
@@ -472,8 +491,8 @@ local function OnDBMTimerBegin(_, id, _, timer, _, simpType, spellId, _, _, _, _
 
     local f = AcquireDeco()
     f.bar    = bar              -- objet DBM (pas de :Get -> le niveau 1 de la cascade passe)
-    f.key    = spellId          -- peut etre une string (waSpecialKey) -> repli par nom
-    f.text   = spellName
+    f.key    = Readable(spellId)   -- peut etre une string (waSpecialKey) -> repli par nom
+    f.text   = Readable(spellName) -- Secret Value possible en M+ -> nil (cf. Readable)
     f.endAbs = GetTime() + (tonumber(timer) or 0)
     -- Parent = la FRAME de la barre (elle porte le SetScale : se parenter ailleurs ferait
     -- decrocher visuellement nos icones a chaque transition small <-> huge).
