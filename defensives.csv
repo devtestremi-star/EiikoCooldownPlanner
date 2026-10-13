@@ -37,6 +37,8 @@ HEAL,31884:0,31884,Avenging Wrath (2 min),PALADIN,,HEALER,,AW,120,no,5,31884,124
 HEAL,31884:1,31884,Avenging Wrath (1 min 45),PALADIN,,HEALER,,AW,105,no,5,"31884, 1241511",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
 HEAL,375576:0,375576,Divine Toll (45 sec),PALADIN,,HEALER,,Toll,45,no,8,375576,379391,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
 HEAL,375576:1,375576,Divine Toll (30 sec),PALADIN,,HEALER,,Toll,30,no,8,"375576, 379391",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
+HEAL,642:0,642,Bubble/Sac (5 min),PALADIN,,HEALER,,Bub,300,no,,,146956,"Combo Divine Shield + Blessing of Sacrifice ; une seule entree, scan sur 642 (baseline)"
+HEAL,642:1,642,Bubble/Sac (3 min 30),PALADIN,,HEALER,,Bub,210,no,,146956,,"Unbreakable Spirit (146956) : -30 % de CD"
 HEAL,200183,200183,Apotheosis,PRIEST,Holy,HEALER,,Apo,120,no,,200183,,
 HEAL,421543,421453,Ultimate Penitence,PRIEST,Discipline,HEALER,,UP,240,no,6,421453,,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
 HEAL,472433,472433,Evangelism,PRIEST,Discipline,HEALER,,Eva,90,no,,472433,,

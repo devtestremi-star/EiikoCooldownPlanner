@@ -42,7 +42,7 @@ HR.defensives = {
     [97462]       = { name = "Rallying Cry",            cooldown = 180, class = "WARRIOR", short = "Rally", external = true, talentReq = { 97462 } },
     -- Poison Cleansing Totem : talent de CLASSE (meme spellID que le sort), toute spe de shaman.
     -- Meme schema que Zephyr : porte par un Shaman DPS (external, role DAMAGER) OU par le heal
-    -- Resto (entree ":heal", role HEALER, dans son toolkit). Pas de macro EHP_ (decision).
+    -- Resto (entree ":heal", role HEALER, dans son toolkit). Macro EHP_PCT sur l'entree DPS.
     [383013]      = { name = "Poison Cleansing Totem",  cooldown = 120, class = "SHAMAN", role = "DAMAGER", short = "PCT", external = true, talentReq = { 383013 } },
     ["383013:heal"] = { name = "Poison Cleansing Totem", cooldown = 120, class = "SHAMAN", role = "HEALER", short = "PCT", spellID = 383013, talentReq = { 383013 } },
     -- Trinket HEALER-ONLY : `trinket = true` SANS `external` => propose uniquement dans le toolkit
@@ -95,6 +95,13 @@ HR.defensives = {
     ["375576:1"]  = { name = "Divine Toll (30 sec)",   cooldown = 30,  class = "PALADIN", role = "HEALER", short = "Toll", spellID = 375576, choiceNode = 8, talentReq = { 375576, 379391 } },
     ["114165:0"]  = { name = "Holy Prism (45 sec)",    cooldown = 45,  class = "PALADIN", role = "HEALER", short = "Prism", spellID = 114165, choiceNode = 8, talentReq = { 114165 }, talentNot = { 379391 } },
     ["114165:1"]  = { name = "Holy Prism (30 sec)",    cooldown = 30,  class = "PALADIN", role = "HEALER", short = "Prism", spellID = 114165, choiceNode = 8, talentReq = { 114165, 379391 } },
+    -- "Bubble/Sac" = combo Divine Shield (642) + Blessing of Sacrifice, mais UNE SEULE entree
+    -- (le scan de talents ne porte que sur 642). Divine Shield est BASELINE -> pas de talentReq
+    -- sur le sort lui-meme ; seules les deux variantes de CD sont departagees par Unbreakable
+    -- Spirit (146956, -30 %) : 5 min de base, 3 min 30 avec. Le nom AFFICHE est "Bubble/Sac",
+    -- jamais "Divine Shield" (642 reste par ailleurs un perso dans HR.personalDefensives).
+    ["642:0"]     = { name = "Bubble/Sac (5 min)",     cooldown = 300, class = "PALADIN", role = "HEALER", short = "Bub", spellID = 642, talentNot = { 146956 } },
+    ["642:1"]     = { name = "Bubble/Sac (3 min 30)",  cooldown = 210, class = "PALADIN", role = "HEALER", short = "Bub", spellID = 642, talentReq = { 146956 } },
     -- Priest
     ["64843:0"]   = { name = "Divine Hymn (3 min)",    cooldown = 180, class = "PRIEST", spec = "Holy", role = "HEALER", short = "Hymn", spellID = 64843, talentReq = { 64843 }, talentNot = { 419110 } },
     ["64843:1"]   = { name = "Divine Hymn (2 min)",    cooldown = 120, class = "PRIEST", spec = "Holy", role = "HEALER", short = "Hymn", spellID = 64843, talentReq = { 64843, 419110 } },

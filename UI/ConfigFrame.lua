@@ -535,10 +535,10 @@ local function BuildGeneralTab(panel)
     local rowY = y[1]
     local function testing() return HR.Runtime and HR.Runtime.state and HR.Runtime.state.mode == "test" end
     local testBtn
-    testBtn = button("Start test", function()
+    testBtn = button("Test and Move", function()
         if testing() then HR.Runtime.Stop()
         elseif HR.Runtime and HR.Runtime.StartTestMode then HR.Runtime.StartTestMode() end
-        testBtn:SetText(testing() and "Stop test" or "Start test")
+        testBtn:SetText(testing() and "Stop test" or "Test and Move")
     end)
     testBtn:ClearAllPoints()
     testBtn:SetPoint("LEFT", resetBtn, "RIGHT", 8, 0)

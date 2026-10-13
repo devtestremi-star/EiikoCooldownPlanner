@@ -21,6 +21,7 @@ HR.externalMacros = {
     { name = "EHP_DARKNESS", key = 196718 },    -- Darkness (Chasseur de demons)
     { name = "EHP_CRY",      key = 97462 },      -- Rallying Cry (Guerrier)
     { name = "EHP_VAMP",     key = 15286 },      -- Vampiric Embrace (Pretre Shadow ; gate par role DPS)
+    { name = "EHP_PCT",      key = 383013 },    -- Poison Cleansing Totem (Chaman ; entree DPS/external)
     { name = "EHP_SMALLDEF", key = "SMALL_DEF" }, -- Defensif perso generique (unique)
     { name  = "EHP_EMPTYBAG",                     -- Appel "tout lacher" (tete de mort)
       body  = "/p Empty the bags - use everything!",
