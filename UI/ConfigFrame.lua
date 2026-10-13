@@ -15,7 +15,7 @@ local BOSS_GAP    = 6           -- ecart horizontal entre boutons de boss
 local SIDEBAR_W   = 64          -- largeur de la colonne de navigation a gauche
 local NAV_ICON    = 35          -- taille d'un bouton-image de navigation (-20%)
 local FOOTER_H    = 26          -- bandeau bas (version + bouton Join discord)
-local DISCORD_URL = "https://discord.gg/NsxeFeV5x"
+local DISCORD_URL = "https://discord.com/invite/FBZFSb9emk"
 local NAV_GAP     = 8           -- espacement vertical entre boutons de nav
 local SIDE_PAD    = 10          -- marge haute de la sidebar
 

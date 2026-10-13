@@ -752,22 +752,23 @@ local content_1210 = {
         bosses = {
             { id = 2124, name = "Adderis and Aspix", abilities = {
                 -- Rotation sequentielle Gale Force -> Thunder and Lightning -> Tempest Winds -> Overload qui
-                -- reboucle (= transfert du Bouclier de Foudre entre les 2 boss). INCLURE : Tempest Winds +
-                -- Overload (cast/marker fournis) ; Gale Force + Thunder and Lightning = EXCLURE. NB : vague
-                -- d'adds (Conduction = dur 5 x3 + dur 15/17) non modelisee (hors releve joueur) -> non
-                -- reconnue en live pour l'instant.
+                -- reboucle (= transfert du Bouclier de Foudre entre les 2 boss). NB : vague d'adds
+                -- (Conduction = dur 5 x3 + dur 15/17) non modelisee (hors releve joueur) -> non reconnue
+                -- en live pour l'instant.
                 -- spellID confirmes via /ecp journal (12.1.0).
-                -- Releve joueur (pull a 1'27) -> offsets, en secondes depuis le pull :
-                --   Gale Force            5 / 47 / 93 / 138  (42, 46, 45)
-                --   Thunder and Lightning 10 / 50 / 95 / 146 (40, 45, 51)
-                --   Tempest Winds         26 / 67 / 117      (41, 50)
-                --   Overload              36 / 81 / 126      (45, 45)
-                -- => cycle commun ~45 s (l'ancien "63-67 s" etait faux) ; les ecarts sort a sort sont du
-                -- jitter de releve manuel, on garde une periode UNIQUE de 45 pour les 4 sorts.
-                { spellID = 1288864, name = "Tempest Winds", firstAt = 26, period = 45, cast = 3, defMarker = { mode = "AFTER_CAST_END", offset = 0 },     aoe = true, allowedInPlan = true, allowInTimeline = true, durations = { 12, 21, 26 } },
-                { spellID = 1288428, name = "Overload",      firstAt = 36, period = 45, cast = 5, defMarker = { mode = "AFTER_CAST_END", offset = -2000 }, aoe = true, allowedInPlan = true, allowInTimeline = true, durations = { 31, 36 } },
-                { spellID = 1289059, name = "Gale Force",            durations = { 1, 5 }, allowInTimeline = false }, -- EXCLURE
-                { spellID = 1288049, name = "Thunder and Lightning", durations = { 4, 9 }, allowInTimeline = false }, -- EXCLURE
+                -- Timers REVISES (2026-10-13) : les 4 sorts ont la MEME periode de 45 s, offsets du 1er
+                -- cast depuis le pull : Gale Force 5 | Thunder and Lightning 9 | Tempest Winds 29 |
+                -- Overload 39. (L'ancien releve manuel donnait 5 / 10 / 26 / 36 avec du jitter ; il est
+                -- remplace par ces valeurs.) L'ANCRE de phase est donc Gale Force (plus petit firstAt)
+                -- -> un cycle = 5, 9, 29, 39 puis +45.
+                -- TIMELINE : les 3 premiers sont AFFICHES, Overload est EXCLU (allowInTimeline = false)
+                -- mais reste PLANIFIABLE (allowedInPlan = true, c'est tout l'interet des 2 flags).
+                -- Gale Force / Thunder and Lightning n'ont pas de `cast` ni de `defMarker` releves
+                -- (defensif pose au temps du sort) ni de `aoe` confirme -> a completer.
+                { spellID = 1289059, name = "Gale Force",            firstAt = 5,  period = 45,                                                                                        allowedInPlan = true, allowInTimeline = true,  durations = { 1, 5 } },
+                { spellID = 1288049, name = "Thunder and Lightning", firstAt = 9,  period = 45,                                                                                        allowedInPlan = true, allowInTimeline = true,  durations = { 4, 9 } },
+                { spellID = 1288864, name = "Tempest Winds",         firstAt = 29, period = 45, cast = 3, defMarker = { mode = "AFTER_CAST_END", offset = 0 },     aoe = true,         allowedInPlan = true, allowInTimeline = true,  durations = { 12, 21, 26 } },
+                { spellID = 1288428, name = "Overload",              firstAt = 39, period = 45, cast = 5, defMarker = { mode = "AFTER_CAST_END", offset = -2000 }, aoe = true,         allowedInPlan = true, allowInTimeline = false, durations = { 31, 36 } }, -- EXCLU de la timeline
             }, durationGroups = {
                 -- dur 42 = timer de cycle PARTAGE par les 4 sorts, dans l'ordre de la rotation.
                 [42] = { 1289059, 1288049, 1288864, 1288428 },
