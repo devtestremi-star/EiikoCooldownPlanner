@@ -40,12 +40,10 @@ A.registry = {
     ["bg-DON"]  = { file = "Background\\1210\\bg-don.tga" },   -- Den of Nalorakk
     ["bg-MR"]   = { file = "Background\\1210\\bg-mr.tga" },    -- Murder Row
     -- (Pool 12.0.7 : fonds SUPPRIMES le 2026-08-26 avec les assets de la saison precedente.
-    --  ⚠️ PORTEE REELLE, plus large qu'il n'y parait : `HR.content =
-    --  HR.contentByVersion[CLIENT_VERSION] or HR.content` (Data/Content.lua) retombe sur le
-    --  pool 12.0.7 pour TOUT build non liste -- donc un futur 12.1.1 sert la liste 12.0.7,
-    --  desormais SANS fond. Degradation propre (UI.UpdateContentBg et UI/HomePage.dungeonArt
-    --  testent la cle avant de poser la texture : ni erreur, ni icone "?"), mais visible.
-    --  Le vrai correctif est d'ajouter une entree dans contentByVersion a chaque build cible.)
+    --  Le selecteur de Data/Content.lua resout la version exacte PUIS la serie majeur.mineur
+    --  (HR.contentBySeries) : tout 12.1.x sert le pool 12.1.0 et ses fonds. Seule une serie
+    --  inconnue retombe sur le pool 12.0.7, desormais SANS fond (degradation propre :
+    --  UI.UpdateContentBg et UI/HomePage.dungeonArt testent la cle avant de poser la texture).)
 
     -- Fond de la vue SETTINGS (Media\Background\bg-1.tga ; absent => transparent).
     ["bg-settings"] = { file = "Background\\bg-1.tga" },

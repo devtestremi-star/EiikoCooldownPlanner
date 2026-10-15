@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120105
 ## Title: EiikoCooldownPlannerDev - ECP
 ## Notes: Plan healer defensive cooldowns against boss abilities
 ## Author: Eiiko

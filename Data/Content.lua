@@ -1229,13 +1229,21 @@ local content_1210 = {
     },
 }
 
--- Selecteur : cle = version COMPLETE (patch-exact). Au prochain build cible, ajouter
--- son entree ici. Repli `or HR.content` : tout build non liste garde la data ci-dessus.
+-- Selecteur : cle = version COMPLETE (patch-exact) en priorite, sinon la SERIE "majeur.mineur"
+-- (une saison M+ couvre toute une serie : 12.1.5 est la saison 2 comme 12.1.0). Sans ce
+-- repli par serie, un correctif mineur non liste (12.1.5) retombait sur le pool 12.0.7
+-- (saison 1). Repli final `or HR.content` : serie inconnue => data 12.0.7 ci-dessus.
 HR.contentByVersion = {
     ["12.0.7"] = HR.content,
     ["12.1.0"] = content_1210,
 }
-HR.content = HR.contentByVersion[HR.CLIENT_VERSION] or HR.content
+HR.contentBySeries = {
+    ["12.0"] = HR.content,
+    ["12.1"] = content_1210,
+}
+HR.content = HR.contentByVersion[HR.CLIENT_VERSION]
+    or HR.contentBySeries[(HR.CLIENT_VERSION or ""):match("^(%d+%.%d+)") or ""]
+    or HR.content
 
 -- Un boss est-il actif ? Absent / true => actif ; seul `enable == false` desactive.
 function HR.BossEnabled(boss)
