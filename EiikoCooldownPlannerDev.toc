@@ -35,6 +35,7 @@ Core\Icons.lua
 
 Core\Planner.lua
 Core\Plan2.lua
+Core\CustomSpells.lua
 Core\Validate.lua
 Core\ShareText.lua
 Core\BossSettings.lua
@@ -50,6 +51,7 @@ UI\ImportBoss.lua
 UI\CatalogImport.lua
 UI\CatalogFrame.lua
 UI\CatalogPreview.lua
+UI\SpellLibrary.lua
 UI\PlanTimeline.lua
 UI\SyncFrame.lua
 UI\ProfileShare.lua

@@ -19,11 +19,13 @@ local addonName, HR = ...
 --   talentRank = { [spellID] = n } : le talent doit etre a EXACTEMENT ce rang (talent a
 --     plusieurs points, ex. Call of the Righteous 1241511 : rang 1 = -15 s, rang 2 = -30 s).
 --     Le set de talents porte le rang comme valeur ({ [spellID] = rank }, cf. Plan2.lua).
---   noSync = true : sort de GESTION du healer (court, tres repete, sans interet pour le groupe).
---     Placable dans le plan comme les autres, mais il ne TRANSITE PAS par le Sync (filtre a
---     l'emission ET a la reception, Core/Share.lua StripNoSync / Core/Sync/PlanSync.lua).
---     Export, catalogue et Packager le transportent normalement. Decide par le flag, jamais
---     par placement. Aucun sort flagge pour l'instant (liste a venir).
+--   noSync = true : sort NON PARTAGEABLE -- il ne quitte JAMAIS la DB du joueur. Sort de
+--     GESTION du healer (court, tres repete, sans interet pour le groupe) ; les sorts CUSTOM du
+--     joueur le portent aussi (Core/CustomSpells.lua). Placable dans le plan comme les autres,
+--     mais retire de TOUT payload (Sync, Export, export d'un boss : Core/Share.lua
+--     BuildPayload/BuildBossPayload) et a TOUTE reception (PlanSync, import natif, catalogue).
+--     Jusqu'au 2026-10-15 l'Export et le catalogue le transportaient : c'etait un BUG. Decide
+--     par le flag, jamais par placement. Aucun sort natif flagge pour l'instant.
 -- (Matching par membre = a brancher dans ScanGroupExternals ; cf. note.)
 HR.defensives = {
     ----------------------------------------------------------------------------
@@ -273,7 +275,9 @@ function HR.ResolveDefEntry(key)
     if d then return d, key end
     if type(key) == "number" then
         for k, def in pairs(HR.defensives) do
-            if def.spellID == key then return def, k end
+            -- Jamais un sort CUSTOM : ce repli sert les cles BRUTES des sorts natifs a
+            -- variantes de CD ; un spellID que seule notre bibliotheque connait n'en est pas une.
+            if def.spellID == key and not def.custom then return def, k end
         end
     end
     return nil

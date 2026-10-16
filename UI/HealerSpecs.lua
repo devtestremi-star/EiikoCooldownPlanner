@@ -690,6 +690,51 @@ local function RenderTalentRow(parent, pool, x0, y0, spells, choices, onChange)
     return x
 end
 
+-- Rangee des SORTS CUSTOM de la spe (Core/CustomSpells.lua) : une icone par sort non archive,
+-- ALLUMEE = actif dans la variante. Clic = bascule. `off` = { [cle] = true } (opt-out, ecrit dans
+-- v.customOff a la validation). Le bouton `+` en bout de rangee cree un sort pour CETTE spe.
+-- `profile` nil / NO_HEALER => rangee vide + message (un sort custom appartient a une spe).
+local function RenderCustomRow(parent, pool, x0, y0, profile, off, plusBtn, emptyFS, onChange)
+    local x, idx = x0, 0
+    local valid = profile and HR.GetHealProfile(profile) ~= nil
+    if valid then
+        for _, it in ipairs(HR.CustomSpells.List(profile, false)) do
+            idx = idx + 1
+            local item = pool[idx]
+            if not item then item = CreateTalentItem(parent); pool[idx] = item end
+            local key = it.key
+            item._sid, item._key = it.entry.spellID, key
+            item.btn:SetImage(HR.GetDefensiveIcon(key))
+            item.btn:SetText(fmtCD(it.entry.cooldown))
+            item.btn:SetSelected(not off[key])
+            item.btn:SetOnClick(function()
+                if off[key] then off[key] = nil else off[key] = true end
+                if onChange then onChange() end
+            end)
+            item:ClearAllPoints(); item:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y0); item:Show()
+            x = x + SPEC_ICON + SPEC_GAP
+        end
+    end
+    for j = idx + 1, #pool do pool[j]:Hide() end
+    plusBtn:SetShown(valid and true or false)
+    if valid then
+        plusBtn:ClearAllPoints(); plusBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y0)
+        x = x + SPEC_ICON + SPEC_GAP
+    end
+    emptyFS:ClearAllPoints()
+    if not profile then
+        emptyFS:SetText("Pick a healer spec first.")
+    elseif not valid then
+        emptyFS:SetText("Custom spells belong to a healer spec: not available without a healer.")
+    elseif idx == 0 then
+        emptyFS:SetText("No custom spell for this spec yet. Click + to add one.")
+    else
+        emptyFS:SetText("")
+    end
+    emptyFS:SetPoint("LEFT", parent, "TOPLEFT", valid and (x + 4) or x0, y0 - SPEC_ICON / 2)
+    return x
+end
+
 -- Rangee de TEMPLATES selectionnables (boutons texte, single-select). Affichee quand la
 -- case "Copy from a template" est cochee. `emptyFS` montre si aucun template ne matche.
 local function RenderTemplateRow(parent, pool, x0, y0, templates, selectedId, onPick, emptyFS)
@@ -1142,7 +1187,7 @@ local function BuildNewVariantModal()
     -- Holy Paladin en compte 14 (AW x3, AC x3, Aura/Toll/Prism x2, Beacon, trinket Vessel)
     -- = 636 px depuis x0=16 -> bord droit a 652. Debordait a 560, mordait encore a 600/640.
     local m = UI.Components.Window(UIParent, {
-        name = "ECPNewVariantModal", title = "New variant", width = 680, height = 500,
+        name = "ECPNewVariantModal", title = "New variant", width = 680, height = 574,
         bgTexture = (HR.Assets.registry["bg-variant"]) and HR.Asset("bg-variant") or nil,
     })
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
@@ -1176,6 +1221,7 @@ local function BuildNewVariantModal()
 
     m.draftExternals = {}; m.healer = nil; m.healerRows = {}; m.extPool = {}
     m.talentSpells = {}; m.talentPool = {}
+    m.customOff = {}; m.customPool = {}
     m.templatePool = {}; m.copyTemplateId = nil
 
     local hl = c:CreateFontString(nil, "OVERLAY", "GameFontNormal"); hl:SetPoint("TOPLEFT", 16, -12); hl:SetText("Select your healer spec:"); hl:SetTextColor(1, 1, 1)
@@ -1184,9 +1230,26 @@ local function BuildNewVariantModal()
     -- (Le scan/discovery se fait via "Scan my group".)
     local tl = c:CreateFontString(nil, "OVERLAY", "GameFontNormal"); tl:SetPoint("TOPLEFT", 16, -74); tl:SetText("Select healer's talents"); tl:SetTextColor(1, 1, 1)
 
-    local el = c:CreateFontString(nil, "OVERLAY", "GameFontNormal"); el:SetPoint("TOPLEFT", 16, -148); el:SetText("Select available group externals:"); el:SetTextColor(1, 1, 1)
+    -- Sorts CUSTOM de la spe (bibliotheque du joueur, cf. Core/CustomSpells.lua) : tous actifs
+    -- par defaut, clic = desactiver dans cette variante. Rangee a part : celle des talents
+    -- occupe deja toute la largeur chez le Holy Paladin.
+    local cl = c:CreateFontString(nil, "OVERLAY", "GameFontNormal"); cl:SetPoint("TOPLEFT", 16, -148); cl:SetText("Custom spells"); cl:SetTextColor(1, 1, 1)
+    m.customPlus = UI.Components.PlusButton(c, { size = SPEC_ICON })
+    m.customPlus:SetOnClick(function()
+        if not (m.healer and HR.GetHealProfile(m.healer)) then return end
+        UI.OpenCustomSpellEditor({ profile = m.healer, lockProfile = true,
+            onSaved = function() if m:IsShown() then UI.RenderNewVariantModal() end end })
+    end)
+    UI.Components.AttachHelpTip(m.customPlus, "Add a custom spell",
+        "Add a spell the addon doesn't know to this healer spec, with your own cooldown.\n\n"
+        .. "Lit icons = available in this variant; click one to disable it. Custom spells are "
+        .. "never shared: Sync and Export leave them out.")
+    m.customEmpty = c:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    m.customEmpty:SetJustifyH("LEFT")
 
-    local nl = c:CreateFontString(nil, "OVERLAY", "GameFontNormal"); nl:SetPoint("TOPLEFT", 16, -220); nl:SetText("Name for this variant"); nl:SetTextColor(1, 1, 1)
+    local el = c:CreateFontString(nil, "OVERLAY", "GameFontNormal"); el:SetPoint("TOPLEFT", 16, -222); el:SetText("Select available group externals:"); el:SetTextColor(1, 1, 1)
+
+    local nl = c:CreateFontString(nil, "OVERLAY", "GameFontNormal"); nl:SetPoint("TOPLEFT", 16, -294); nl:SetText("Name for this variant"); nl:SetTextColor(1, 1, 1)
     local edit = CreateFrame("EditBox", nil, c, "InputBoxTemplate")
     edit:SetSize(280, 24); edit:SetPoint("TOPLEFT", nl, "BOTTOMLEFT", 4, -6); edit:SetAutoFocus(false)  -- champ SOUS le titre
     edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -1195,7 +1258,7 @@ local function BuildNewVariantModal()
 
     -- "Copy from a template" : coche => debloque la liste des templates (meme healer +
     -- memes talents) ; cliquer un template copie son plan dans la nouvelle variante.
-    local chk = CreateFrame("CheckButton", nil, c, "UICheckButtonTemplate"); chk:SetPoint("TOPLEFT", 14, -278)
+    local chk = CreateFrame("CheckButton", nil, c, "UICheckButtonTemplate"); chk:SetPoint("TOPLEFT", 14, -352)
     chk.text = chk:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); chk.text:SetPoint("LEFT", chk, "RIGHT", 2, 0)
     chk.text:SetText("Copy from a template"); chk.text:SetTextColor(1, 1, 1)
     chk:SetScript("OnClick", function() UI.RenderNewVariantModal() end)
@@ -1207,7 +1270,7 @@ local function BuildNewVariantModal()
 
     -- "Set as template" : visible UNIQUEMENT quand la compo est healer-seul (aucun external).
     -- Marque la variante creee comme template reutilisable.
-    local tchk = CreateFrame("CheckButton", nil, c, "UICheckButtonTemplate"); tchk:SetPoint("TOPLEFT", 14, -334)
+    local tchk = CreateFrame("CheckButton", nil, c, "UICheckButtonTemplate"); tchk:SetPoint("TOPLEFT", 14, -408)
     tchk.text = tchk:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); tchk.text:SetPoint("LEFT", tchk, "RIGHT", 2, 0)
     tchk.text:SetText("Set as template (healer only)"); tchk.text:SetTextColor(1, 1, 1)
     m.templateChk = tchk
@@ -1279,7 +1342,7 @@ function UI.RenderNewVariantModal()
         function() return m.healer end,
         function(k)
             if m.editId then return end                                    -- heal VERROUILLE en edition
-            if k ~= m.healer then m.healer = k; wipe(m.talentSpells) end   -- spe change -> reset talents
+            if k ~= m.healer then m.healer = k; wipe(m.talentSpells); wipe(m.customOff) end   -- spe change -> reset talents + custom
             UI.RenderNewVariantModal()
         end)
     -- Sorts talentes du healer (vide si aucun healer choisi, ou si "No healer" : pas de
@@ -1287,7 +1350,9 @@ function UI.RenderNewVariantModal()
     local spells = (m.healer and m.healer ~= HR.NO_HEALER and HR.GetHealerTalentSpells(m.healer)) or {}
     RenderTalentRow(c, m.talentPool, 16, -94, spells, m.talentSpells,
         function() UI.RenderNewVariantModal() end)
-    RenderExternalsRow(c, m.extPool, 16, -168, m.draftExternals,
+    RenderCustomRow(c, m.customPool, 16, -168, m.healer, m.customOff, m.customPlus, m.customEmpty,
+        function() UI.RenderNewVariantModal() end)
+    RenderExternalsRow(c, m.extPool, 16, -242, m.draftExternals,
         function() UI.RenderNewVariantModal() end, false)
 
     -- En EDITION : on edite la compo (externals + talents), pas le plan -> pas de template/import.
@@ -1312,7 +1377,7 @@ function UI.RenderNewVariantModal()
             for _, t in ipairs(templates) do if t.id == m.copyTemplateId then ok = true; break end end
             if not ok then m.copyTemplateId = nil end
         end
-        RenderTemplateRow(c, m.templatePool, 16, -304, templates, m.copyTemplateId,
+        RenderTemplateRow(c, m.templatePool, 16, -378, templates, m.copyTemplateId,
             function(id) m.copyTemplateId = (m.copyTemplateId == id) and nil or id; UI.RenderNewVariantModal() end,
             m.templateEmpty)
     else
@@ -1359,7 +1424,7 @@ function UI.OpenNewVariantModal()
     if not UI.newVarModal then BuildNewVariantModal() end
     local m = UI.newVarModal
     m.editId = nil
-    m.healer = nil; wipe(m.draftExternals); wipe(m.talentSpells); m.copyTemplateId = nil
+    m.healer = nil; wipe(m.draftExternals); wipe(m.talentSpells); wipe(m.customOff); m.copyTemplateId = nil
     m.edit:SetText(""); m.importChk:SetChecked(false); m.templateChk:SetChecked(false)
     m._scanning = false                                              -- reset du loader Scan
     if m.scanBtn then m.scanBtn:SetText("Scan my group"); m.scanBtn:SetEnabled(true) end
@@ -1380,6 +1445,7 @@ function UI.OpenEditVariantModal(v)
     m.healer = v.healer
     wipe(m.draftExternals); for k, n in pairs(v.externals or {}) do m.draftExternals[k] = n end
     wipe(m.talentSpells);   for k, val in pairs(v.talentSpells or {}) do m.talentSpells[k] = val end
+    wipe(m.customOff);      for k in pairs(v.customOff or {}) do m.customOff[k] = true end
     m.copyTemplateId = nil
     m.edit:SetText(v.name or "")
     m.importChk:SetChecked(false); m.templateChk:SetChecked(false)
@@ -1402,7 +1468,7 @@ function UI.SubmitNewVariant()
     -- Mode EDITION : met a jour la variante existante (externals + talents + nom) puis purge les
     -- defensifs devenus orphelins. Le HEAL reste verrouille. Pas de template/import ici.
     if m.editId then
-        local _, removed = HR.V2_UpdateVariant(m.editId, name, m.draftExternals, m.talentSpells)
+        local _, removed = HR.V2_UpdateVariant(m.editId, name, m.draftExternals, m.talentSpells, m.customOff)
         m:Hide()
         UI.RefreshRows()
         if removed and removed > 0 then
@@ -1417,6 +1483,7 @@ function UI.SubmitNewVariant()
     local opts = {
         isTemplate     = (not hasExt) and m.templateChk:GetChecked() and true or nil,
         copyTemplateId = m.importChk:GetChecked() and m.copyTemplateId or nil,
+        customOff      = m.customOff,
     }
     HR.V2_CreateVariant(name, m.healer, m.draftExternals, m.talentSpells, opts)
     m:Hide()
@@ -1566,6 +1633,13 @@ local function BuildExportModal()
     local ok = UI.Components.TextButton(c, { text = "Close", width = 120, onClick = function() m:Hide() end })
     ok:SetPoint("BOTTOMRIGHT", -16, 14)
 
+    -- Note optionnelle en bas a gauche (ex. placements non partageables laisses de cote).
+    m.note = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    m.note:SetPoint("BOTTOMLEFT", 16, 20)
+    m.note:SetPoint("RIGHT", ok, "LEFT", -12, 0)
+    m.note:SetJustifyH("LEFT")
+    m.note:SetTextColor(1, 0.82, 0)
+
     m:Hide()
     UI.exportModal = m
 end
@@ -1574,10 +1648,11 @@ end
 -- EXTRAITE de UI.OpenExportModal pour que d'autres exports -- le plan d'un seul boss depuis
 -- l'apercu de catalogue (memo §14) -- la reutilisent sans redupliquer la mecanique d'autocopie.
 -- Le titre est PARAMETRABLE : « Export variant » serait faux sur un plan de boss.
-function UI.ShowExportString(str, title)
+function UI.ShowExportString(str, title, note)
     if not UI.exportModal then BuildExportModal() end
     local m = UI.exportModal
     if title and m.title then m.title:SetText(title) end
+    m.note:SetText(note or "")
     m.exportStr = str or ""
     m.edit:SetText(str or "<export failed: encoding unavailable or no dungeon>")
     m:Show(); m:Raise()
@@ -1590,7 +1665,13 @@ function UI.OpenExportModal()
     local dID = UI.activeDungeonID
     if not dID then local d = HR.content and HR.content[UI.selDungeon]; dID = d and d.id end
     local str = (HR.Share and HR.Share.EncodeVariant) and HR.Share.EncodeVariant(dID, cur) or nil
-    UI.ShowExportString(str, "Export variant")
+    -- Les sorts `noSync` (gestion du healer, sorts custom) ne partent pas : on le DIT, sinon le
+    -- destinataire recoit un plan plus maigre que celui qu'on a sous les yeux, sans explication.
+    local _, dropped = HR.Share.StripNoSync(cur.assignments)
+    local note = (dropped > 0) and ("%d placement%s of non-shareable spells (custom spells, healer "
+        .. "management spells) %s not exported."):format(dropped, dropped > 1 and "s" or "",
+        dropped > 1 and "are" or "is") or nil
+    UI.ShowExportString(str, "Export variant", note)
     if not str then HR:Print("Export failed (encoding unavailable or no dungeon selected).") end
 end
 
@@ -1633,6 +1714,16 @@ function UI.ImportVariantString(str)
     if not HR.Share.ValidatePayload(payload) then
         HR:Print("Import failed: invalid or corrupted string."); return false
     end
+    -- Sorts `noSync` retires DES L'ENTREE, avant d'aiguiller : les deux routes (variante, boss)
+    -- les voient donc deja absents. Ils ne devraient pas y etre (BuildPayload les retire a
+    -- l'emission), sauf chaine d'une version anterieure -- ou cle custom etrangere (`U:<n>`)
+    -- qui tomberait sur un sort de NOTRE bibliotheque. AVANT la validation de la route boss :
+    -- ce n'est pas une reparation (memo §14.7), c'est l'emetteur qui ne les aurait jamais
+    -- envoyes ; apres, un tel sort non placable ferait refuser tout le plan pour rien.
+    -- `payload` est une table fraiche issue du decodage, pas la DB.
+    local dropped
+    payload.asg, dropped = HR.Share.StripNoSync(payload.asg)
+    if dropped > 0 then HR:Debug("[import] noSync stripped:", dropped) end
     -- Plan d'UN SEUL boss (memo §14) : MEME format, plus un drapeau. Route dediee, qui n'ecrit
     -- PAS de variante -- elle ecrase un boss dans celle que le joueur a sous les yeux.
     -- ⚠️ Le drapeau se lit ICI, AVANT ImportPayload : apres, la variante serait deja creee.

@@ -72,6 +72,8 @@ A.registry = {
     ["icon-import"]   = { path = "Interface\\Icons\\INV_Scroll_03" },
     -- Catalogue : recherche de plans de la communaute, par donjon.
     ["icon-catalog"]  = { path = "Interface\\Icons\\INV_Misc_Book_11" },
+    -- Spells : bibliotheque de sorts (natifs + custom du joueur), cf. UI/SpellLibrary.lua.
+    ["icon-spells"]   = { path = "Interface\\Icons\\Spell_Holy_MagicalSentry" },
 }
 
 -- Ajoute / remplace une entree a l'execution (ex. un module enregistre ses assets).

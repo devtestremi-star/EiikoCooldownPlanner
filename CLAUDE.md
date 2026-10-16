@@ -133,6 +133,13 @@ Core/
                          #   est libre : une touche prise n'est JAMAIS volee. API `KB.CurrentLabel/
                          #   Set/Clear` (l'UI ne touche a aucune API de binding) ; `UPDATE_BINDINGS`
                          #   resynchronise la rangee des options. Charge APRES `Core/Events.lua`.
+  CustomSpells.lua       # SORTS CUSTOM du joueur (bibliotheque `ECPlannerDB.customSpells`, cles
+                         #   `U:<n>`) : spellID + CD saisi + spe de heal. INJECTES dans
+                         #   HR.defensives (`custom = true, noSync = true`, class/role HEALER/spec
+                         #   tires du profil) -> tout l'addon les lit sans le savoir. Par variante :
+                         #   `v.customOff` = sorts DESACTIVES (opt-out). Archiver (jamais supprimer) :
+                         #   plus propose, reste resolu/placable la ou il est place. Spe verrouillee
+                         #   des que le sort est place. Init par HR:OnInitialize juste apres InitDB.
   Commands.lua           # slash /ecp (alias /hp)
 Data/
   Defensives.lua         # défensifs (spellID -> cooldown, class, role)
@@ -168,6 +175,11 @@ UI/
                          #   avant validerait un plan troue en silence (memo §14.7).
                          #   Seul le boss DECLARE (`bossOnly`) est atteignable, meme si le payload
                          #   en transporte d'autres.
+  SpellLibrary.lua       # section SPELLS (viewMode "spells", bouton de la sidebar, groupe des
+                         #   outils de plan) : sorts NATIFS d'une spe en lecture seule | sorts CUSTOM
+                         #   (ajouter / editer / archiver / restaurer). + modale d'ajout/edition
+                         #   `UI.OpenCustomSpellEditor` (aussi ouverte par le `+` de la rangee
+                         #   « Custom spells » de la modale Edit plan, UI/HealerSpecs.lua).
   SyncFrame.lua          # modale de PROGRESSION d'une poussee (bouton Sync) : 1 ligne par membre
                          #   du groupe + spinner (8 points, zero texture) jusqu'au verdict —
                          #   `Sync success` (SYNC_OVER recu) / `Sync failed` (SYNC_START mais pas
@@ -259,6 +271,10 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   couvre TOUT le donjon. **`healer` = clé de profil de heal** (`"PRIEST_DISC"`, `"PALADIN"`…),
   posée directement : c'est l'identité de heal de la variante.
   `assignments[encounterID][occKey] = { defID, ... }`.
+  Champ additif `customOff = { ["U:<n>"] = true }` (absent = rien de désactivé) : sorts
+  **custom** de la spe désactivés dans cette variante (opt-out, cf. `Core/CustomSpells.lua`).
+  Écrit par la modale Edit/New plan ; recopié par Duplicate ; `HR.IsTokenPlaceable` le lit
+  (sans cette branche, éditer la compo purgeait tous les placements custom).
   ⚠️ La notion de **`comp`** — tableau positionnel de 5 slots (`HR.COMP_SLOTS`), trié par
   `HR.SortComp`, comparé au groupe par `HR.GetGroupComp`, dont on tirait l'identité de heal
   via `HR.VariantHealKey` — était **propre au V1** : supprimée le 2026-08-26 avec lui.
@@ -282,11 +298,18 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   `talentNot` (aucun), `talentRank = { [id] = n }` (rang **exact** d'un talent à plusieurs
   points, ex. Call of the Righteous 1241511 → AW/AC en 3 versions `:0/:1/:2`). Les sets de
   talents valent `{ [spellID] = rang }` (`talentSetFromConfig`, `ShareText.TalentSet` où un
-  id répété = rang, cf. PLAN_FORMAT.md §11.8). `noSync = true` = sort de GESTION du healer
-  (court, très répété, ex. Beacon of Virtue 15 s) : placable dans le plan, mais **ne transite
-  pas par le Sync** (`Share.StripNoSync` sur une COPIE à l'émission dans `PlanSync.Push`, et
-  à la réception avant la gate) ; export/catalogue/Packager le transportent. Le flag décide,
-  jamais un choix par placement ; aucun signal UI. `key` = spellID, ou chaîne
+  id répété = rang, cf. PLAN_FORMAT.md §11.8). `noSync = true` = sort **NON PARTAGEABLE** : il
+  ne quitte **jamais** la DB du joueur. Sorts de GESTION du healer (court, très répété, ex.
+  Beacon of Virtue 15 s) et sorts **custom** (`Core/CustomSpells.lua`). Placable dans le plan,
+  mais retiré de **tout** payload (`Share.BuildPayload` / `BuildBossPayload` : Sync, Export,
+  export d'un boss) et à **toute** réception, juste après le décodage (`PlanSync`, import natif
+  `UI.ImportVariantString`, catalogue `sanitizeEntry`) — copie, jamais la source. ⚠️ Jusqu'au
+  2026-10-15 l'Export et le catalogue le transportaient : c'était un **bug**. Le flag décide,
+  jamais un choix par placement. Seul signal UI : une note dans la modale Export (« N placements
+  … not exported »). Question OUVERTE : le format web `ecp;2` peut-il placer un `noSync` ?
+  `custom = true` = sort de la bibliothèque du joueur (cf. `Core/CustomSpells.lua`) : exclu des
+  index par spellID (`ShareText.BuildDefIndex`, Capture, `ResolveDefEntry`) et des listes de
+  sorts natifs (`GetHealerTalentSpells`, variante de test). `key` = spellID, ou chaîne
   synthétique (variantes de CD / entrées génériques comme `"SMALL_DEF"` (cd 90, nom
   « Defensive » = **appel défensif perso GÉNÉRIQUE unique** ; la nuance small/big a été
   retirée, `BIG_DEF` supprimé) / `"EMPTY_BAG"` (cd 0, tête de mort) = appels de défensif
@@ -364,10 +387,10 @@ Messages livres :
   recoit jamais un aux poussees suivantes) et *Trust this author* (whitelist
   `db2.syncTrust[<auteur qualifie>]`, cle additive — plus aucune demande pour CE joueur,
   meme pour un plan jamais vu).
-  **Sorts `noSync`** (flag `HR.defensives`) : retires du payload a l'emission
-  (`EncodeVariant(dID, v, { stripNoSync = true })` -> copie) ET a la reception (`OnNetMessage`
+  **Sorts `noSync`** (flag `HR.defensives`) : retires de TOUT payload par `BuildPayload` (le
+  `{ stripNoSync = true }` de `PlanSync.Push` n'a plus d'effet) ET a la reception (`OnNetMessage`
   PLAN, juste apres `DecodeVariant`, pour les emetteurs en version anterieure). Le plan local du
-  healer les garde ; Export/catalogue ne filtrent pas (pas d'`opts`).
+  healer les garde. Export et catalogue filtrent aussi depuis le 2026-10-15 (cf. Defensifs).
   ⚠️ L'etat renvoye a l'emetteur est un **champ de la reponse**, pas un evenement
   de plus : `SYNC_START` porte `""` (recu) ou `"PENDING"` (j'attends mon joueur -> la ligne
   affiche « Pending approval… » et echappe au verdict des 5 s), `SYNC_OVER` porte `"OK"`

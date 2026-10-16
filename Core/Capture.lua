@@ -429,7 +429,7 @@ local function commsDefKey(spellID)
         commsDefIndex = {}
         for key, d in pairs(HR.defensives or {}) do
             local sid = tonumber(d and d.spellID) or tonumber(key)
-            if sid and not commsDefIndex[sid] then commsDefIndex[sid] = key end
+            if sid and not d.custom and not commsDefIndex[sid] then commsDefIndex[sid] = key end
         end
     end
     return commsDefIndex[spellID]

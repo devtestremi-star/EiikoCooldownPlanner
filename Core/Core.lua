@@ -10,6 +10,10 @@ function HR:OnInitialize()
 
     self:InitDB()
 
+    -- Sorts CUSTOM du joueur : injectes dans HR.defensives AVANT tout consommateur (variante
+    -- de test, macros, runtime). Cf. Core/CustomSpells.lua.
+    if HR.CustomSpells and HR.CustomSpells.Init then HR.CustomSpells.Init() end
+
     -- Purge des plans IMPORTES expires (option "Autodelete in 24h" du partage).
     if HR.PruneExpiredVariants then HR.PruneExpiredVariants() end
 

@@ -1401,7 +1401,7 @@ function HR.BuildTestVariant()
     -- Aucun (= non soigneur) : on ne l'ajoute pas (l'alerte healer ne sonnera pas, "healer only").
     local healCD
     for key, d in pairs(HR.defensives) do
-        if d.role == "HEALER" and HR.PlayerCanUseDefensive(d) then healCD = key; break end
+        if d.role == "HEALER" and not d.custom and HR.PlayerCanUseDefensive(d) then healCD = key; break end
     end
     local asg = { [boss.id] = {} }
     for _, o in ipairs(HR.GenerateOccurrences(boss, HR.FIGHT_LENGTH)) do

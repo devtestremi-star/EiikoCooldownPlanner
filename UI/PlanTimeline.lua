@@ -28,7 +28,7 @@ local CDP_MAXH       = 440
 local CDP_HEADER_H   = 24
 local CDP_ROW_H      = 28
 local CDP_ICON       = 22
-local CDP_SECTION    = { [1] = "Healer CDs", [2] = "Group Externals", [3] = "Personals" }
+local CDP_SECTION    = { [1] = "Healer CDs", [2] = "Group Externals", [3] = "Personals", [4] = "Custom spells" }
 
 local function fmtTime(t)
     return string.format("%d:%02d", math.floor(t / 60), t % 60)

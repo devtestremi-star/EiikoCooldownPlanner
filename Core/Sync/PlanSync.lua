@@ -52,9 +52,10 @@ end
 -- (HR.Share.EncodeVariant : BuildPayload -> CBOR -> Deflate -> Base64) ; l'id distant
 -- voyage dans le corps de la trame, PAS dans le CBOR, pour ne rien changer au format du
 -- canal de partage deja deploye chez les joueurs.
--- `stripNoSync` : les sorts flagges `noSync` (Data/Defensives.lua -- gestion du healer, courts,
--- tres repetes) ne TRANSITENT PAS par le Sync. Le plan LOCAL du healer les garde intacts (le
--- filtre travaille sur une copie) ; export et catalogue les transportent normalement.
+-- Les sorts flagges `noSync` (Data/Defensives.lua -- gestion du healer ; sorts custom du
+-- joueur) ne TRANSITENT PAS : BuildPayload les retire toujours, Sync comme export. Le plan
+-- LOCAL les garde intacts (le filtre travaille sur une copie). `stripNoSync` ci-dessous est
+-- l'ancien interrupteur, desormais sans effet -- conserve pour la lisibilite de l'intention.
 function PlanSync.Push(dID, variant)
     if not dID or not variant then
         HR:Print("Open a dungeon and select a variant before syncing.")

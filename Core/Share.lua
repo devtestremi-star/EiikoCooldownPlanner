@@ -48,8 +48,8 @@ end
 
 -- Chaine d'export partageable d'une variante (MEME encodage que le Share : CBOR -> Deflate ->
 -- Base64). Sert a l'export hors-groupe (copier/coller) ET a la poussee Sync. nil si echec.
--- `opts` (optionnel) est transmis a BuildPayload : { stripNoSync = true } = poussee Sync (les
--- sorts `noSync` restent chez le healer) ; sans opts = export/catalogue, plan complet.
+-- Les sorts `noSync` n'y figurent JAMAIS (cf. BuildPayload). `opts` est transmis tel quel a
+-- BuildPayload et n'y change plus rien (vestige de l'epoque ou seul le Sync filtrait).
 -- `Share.BuildPayload` est definie plus bas -> resolue a l'appel (runtime), pas a la definition.
 function Share.EncodeVariant(dungeonID, variant, opts)
     local payload = Share.BuildPayload(dungeonID, variant, opts)
@@ -103,14 +103,25 @@ local function IsKnownDungeon(dID)
     return false
 end
 
--- Un token de defensif est-il flagge `noSync` (sort de GESTION du healer : court, tres repete,
--- sans interet pour le groupe) ? Le flag vit sur l'entree HR.defensives, jamais sur le plan.
+-- Un token de defensif est-il flagge `noSync` ? Le flag vit sur l'entree HR.defensives,
+-- jamais sur le plan. Deux familles le portent : les sorts de GESTION du healer (courts, tres
+-- repetes, sans interet pour le groupe) et les sorts CUSTOM du joueur (Core/CustomSpells.lua),
+-- qui n'existent que dans SA bibliotheque.
+--
+-- REGLE : un sort `noSync` ne quitte JAMAIS la DB du joueur. Ni par le Sync, ni par l'Export,
+-- ni par l'export d'un seul boss. Le laisser partir dans les exports etait un BUG (corrige le
+-- 2026-10-15) -- c'est aussi ce qui rend les sorts custom surs : leurs cles (`U:<n>`) sont des
+-- compteurs LOCAUX, le `U:1` d'un joueur n'est pas celui d'un autre.
 local function isNoSync(token)
     local d = HR.defensives[HR.DefKeyOf(token)]
     return d and d.noSync == true
 end
 
--- Recopie d'assignments SANS les tokens `noSync`. NOUVELLE table a chaque niveau (encounter,
+-- Recopie d'assignments SANS les tokens `noSync`. Appelee aux DEUX frontieres : a l'emission
+-- (BuildPayload / BuildBossPayload) et a la reception, juste apres le decodage (PlanSync, import
+-- natif UI.ImportVariantString, catalogue) -- la reception couvre les chaines produites par une
+-- version anterieure ou par le Packager, et neutralise une cle custom etrangere qui tomberait
+-- sur une des notres. NOUVELLE table a chaque niveau (encounter,
 -- occurrence, liste) : la source -- `variant.assignments` cote emetteur -- n'est JAMAIS touchee
 -- (regle absolue sur les donnees sauvegardees). Les entrees gardees sont recopiees TELLES QUELLES
 -- (pas de normalisation : c'est le role de SanitizeAssignments, qui passe derriere). Une
@@ -141,13 +152,11 @@ end
 -- NB : pour les boss multi-timelines (ex. L'ura), les plans des DEUX variantes sont DEJA
 -- dans `asg` (cles d'occurrence prefixees par la variante). On ajoute `tlv` = la variante
 -- JOUEE choisie par l'emetteur, par boss, pour la transmettre aussi.
--- `opts.stripNoSync` (poussee Sync UNIQUEMENT, cf. Core/Sync/PlanSync.lua) : `asg` est une
--- COPIE sans les tokens `noSync`. Sans opts (export, catalogue, Packager, BuildBossPayload) :
--- `asg` = la table de la variante, plan complet, comportement inchange.
+-- `asg` est TOUJOURS une COPIE sans les tokens `noSync` (cf. isNoSync) : export, Sync, tout.
+-- `opts` n'est plus lu (`stripNoSync` etait l'ancien interrupteur, reserve au Sync).
 function Share.BuildPayload(dungeonID, variant, opts)
     if not dungeonID or not variant then return nil end
-    local asg = variant.assignments
-    if opts and opts.stripNoSync then asg = Share.StripNoSync(asg) end
+    local asg = Share.StripNoSync(variant.assignments)
     local tlv
     for _, d in ipairs(HR.content) do
         if d.id == dungeonID then
@@ -188,10 +197,13 @@ end
 --
 -- `name` voyage mais n'est PAS ecrit a l'import : la variante de destination garde le sien.
 -- Il ne sert qu'a l'ecran de confirmation.
+-- Sans les tokens `noSync`, comme BuildPayload. Un boss dont il ne reste rien n'a pas de plan.
 function Share.BuildBossPayload(dungeonID, variant, encID)
     if not dungeonID or not variant or encID == nil then return nil end
-    local asg = variant.assignments and variant.assignments[encID]
-    if type(asg) ~= "table" or not next(asg) then return nil end
+    local src = variant.assignments and variant.assignments[encID]
+    if type(src) ~= "table" or not next(src) then return nil end
+    local asg = Share.StripNoSync({ [encID] = src })[encID]
+    if not asg then return nil end
     return {
         v        = PROTO,
         kind     = "variant",

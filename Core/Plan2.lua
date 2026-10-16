@@ -395,8 +395,9 @@ end
 
 -- Cree une variante (healer + externals). importBase => part de la Base template du heal.
 -- (Prefixe V2_ : vestige de la coexistence avec le store V1, supprime le 2026-08-26.)
--- opts = { isTemplate = bool, copyTemplateId = id } : copyTemplateId => le plan (assignments)
--- est copie depuis CE template ; sinon plan vide.
+-- opts = { isTemplate = bool, copyTemplateId = id, customOff = { [cle] = true } } :
+-- copyTemplateId => le plan (assignments) est copie depuis CE template ; sinon plan vide.
+-- customOff => sorts CUSTOM desactives dans cette variante (cf. Core/CustomSpells.lua).
 function HR.V2_CreateVariant(name, healer, externals, talentSpells, opts)
     local db = HR.db2; if not db then return nil end
     local s = dStore(); if not s then return nil end
@@ -413,8 +414,21 @@ function HR.V2_CreateVariant(name, healer, externals, talentSpells, opts)
         externals    = HR.DeepCopy(externals or {}),
         talentSpells = HR.DeepCopy(talentSpells or {}),   -- { [spellID] = cle_de_variante }
         isTemplate   = opts.isTemplate or nil,
+        customOff    = (opts.customOff and next(opts.customOff)) and HR.DeepCopy(opts.customOff) or nil,
         assignments  = assignments,
     }
+    -- Copie de template : un sort CUSTOM que CETTE variante desactive ne doit pas y arriver
+    -- place. On filtre la COPIE (donnee neuve, jamais celle du template), et seulement les
+    -- tokens custom -- le reste du plan copie est inchange.
+    for _, byOcc in pairs(assignments) do
+        for _, list in pairs(byOcc) do
+            for i = #list, 1, -1 do
+                local key = HR.DefKeyOf(HR.EntryToken(list[i]))
+                local d = HR.defensives[key]
+                if d and d.custom and not HR.CustomSpells.IsActiveIn(v, key) then table.remove(list, i) end
+            end
+        end
+    end
     s.variants[id] = v
     s.lastSeen = id                                       -- la nouvelle variante devient l'affichee
     return v
@@ -430,6 +444,10 @@ function HR.IsTokenPlaceable(v, token)
     if t == "SMALL_DEF" or t == "EMPTY_BAG" then return true end          -- generiques : toujours
     local defKey = HR.DefKeyOf(token)
     local d = HR.defensives[defKey]
+    -- Sort CUSTOM : placable tant qu'il est de la spe de la variante et pas desactive dans
+    -- celle-ci (un sort ARCHIVE le reste : il est deja dans des plans). ⚠️ Sans cette branche,
+    -- V2_UpdateVariant purgerait TOUS les placements custom a la premiere edition de la compo.
+    if d and d.custom then return HR.CustomSpells.IsActiveIn(v, defKey) end
     if t:find("@heal", 1, true) then                                     -- trinket porte par le HEAL
         if not (d and d.trinket) then return false end
         for _, val in pairs(v.talentSpells or {}) do if val == defKey then return true end end
@@ -511,17 +529,19 @@ local function canEditActive()
     return (HR.CanEditVariant(HR.GetActiveVariant()))
 end
 
--- Edite une variante EXISTANTE : change name + externals + talents (le HEAL reste VERROUILLE),
+-- Edite une variante EXISTANTE : change name + externals + talents + sorts custom desactives
+-- (`customOff`, nil = inchange) (le HEAL reste VERROUILLE),
 -- puis SCANNE le plan et SUPPRIME EN PLACE les defensifs devenus orphelins (token plus placable
 -- avec la nouvelle compo). Suppression en place => preserve le lien DB. Action 100% user
 -- (validation de la modale). Renvoie v, nbRetire.
-function HR.V2_UpdateVariant(id, name, externals, talentSpells)
+function HR.V2_UpdateVariant(id, name, externals, talentSpells, customOff)
     local s = dStore(); if not s then return nil end
     local v = id and s.variants[id]; if not v then return nil end
     if not HR.CanEditVariant(v) then return nil end          -- verrou d'edition
     if name and name ~= "" then v.name = name end
     v.externals    = HR.DeepCopy(externals or {})
     v.talentSpells = HR.DeepCopy(talentSpells or {})
+    if customOff then v.customOff = next(customOff) and HR.DeepCopy(customOff) or nil end
     local removed = 0
     for _, byOcc in pairs(v.assignments or {}) do
         for _, list in pairs(byOcc) do
@@ -556,6 +576,7 @@ function HR.V2_DuplicateVariant(name)
         externals    = HR.DeepCopy(cur.externals or {}),
         talentSpells = HR.DeepCopy(cur.talentSpells or {}),
         assignments  = HR.DeepCopy(cur.assignments or {}),
+        customOff    = cur.customOff and HR.DeepCopy(cur.customOff) or nil,
         -- PAS de `synced` ni de `syncFrom` : cf. l'avertissement ci-dessus.
     }
     s.variants[id] = v
@@ -790,6 +811,12 @@ function HR.GetPlaceableDefsFor(v)
         if d then out[#out + 1] = { token = k, defKey = k, label = d.name, group = 3 } end
     end
 
+    -- Sorts CUSTOM du joueur actifs dans la variante (spe + pas desactives + pas archives).
+    for _, it in ipairs(HR.CustomSpells.PlaceableFor(v)) do
+        local d = HR.defensives[it.key]
+        if d then out[#out + 1] = { token = it.key, defKey = it.key, label = d.name, group = 4 } end
+    end
+
     table.sort(out, function(a, b)
         if a.group ~= b.group then return a.group < b.group end
         return a.label < b.label
@@ -885,7 +912,7 @@ function HR.GetHealerTalentSpells(profileKey)
     if not prof then return {} end
     local groups = {}
     for key, d in pairs(HR.defensives) do
-        local healerTalent = d.role == "HEALER" and d.class == prof.class
+        local healerTalent = not d.custom and d.role == "HEALER" and d.class == prof.class
             and (not d.spec or d.spec == prof.spec) and (d.talentReq or d.talentNot)
         if healerTalent or d.trinket then              -- trinket toolkit = dispo pour tout healer
             local sid = HR.GetDefensiveSpellID(key)

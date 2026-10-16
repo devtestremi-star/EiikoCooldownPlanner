@@ -1572,6 +1572,7 @@ function UI.RefreshRows()
     if UI.bossSettingsPanel then UI.bossSettingsPanel:Hide() end
     if UI.catalogBar then UI.catalogBar:Hide() end
     if UI.catalogPanel then UI.catalogPanel:Hide() end
+    if UI.HideSpellLibrary then UI.HideSpellLibrary() end
     if UI.planTimeline then UI.planTimeline:Hide() end
     if UI.specsPanel then UI.specsPanel:Hide() end
     if UI.CloseVariantPopup then UI.CloseVariantPopup() end
@@ -1614,6 +1615,15 @@ function UI.RefreshRows()
         if UI.contentBg then UI.contentBg:Show() end
         if UI.contentDim then UI.contentDim:Show() end
         UI.RenderCatalog()
+        return
+    elseif UI.viewMode == "spells" then
+        -- Vue SPELLS : bibliotheque de sorts natifs + custom (cf. UI/SpellLibrary.lua).
+        UI.bossTitle:SetText("")
+        if UI.scroll then UI.scroll:Hide() end
+        UI.UpdateContentBg()                                  -- bg-settings (viewMode == spells)
+        if UI.contentBg then UI.contentBg:Show() end
+        if UI.contentDim then UI.contentDim:Show() end
+        UI.RenderSpellLibrary()
         return
     elseif UI.viewMode == "faq" then
         -- Vue FAQ (section dediee) : MEME fond que Settings (bg-settings) mais SANS la
@@ -1717,8 +1727,8 @@ end
 function UI.UpdateContentBg()
     if not UI.contentBg then return end
     local key
-    if UI.viewMode == "options" or UI.viewMode == "faq" or UI.viewMode == "home" then
-        key = "bg-settings"                                  -- vues Settings/FAQ/Home : meme fond dedie
+    if UI.viewMode == "options" or UI.viewMode == "faq" or UI.viewMode == "home" or UI.viewMode == "spells" then
+        key = "bg-settings"                                  -- vues Settings/FAQ/Home/Spells : meme fond dedie
     else
         local dungeon = HR.content[UI.selDungeon]
         key = dungeon and dungeon.abbr and ("bg-" .. dungeon.abbr)
@@ -1737,7 +1747,8 @@ function UI.UpdateContentBg()
     end
     if UI.contentDimSettings then
         -- voile renforce partage par Settings, FAQ et Home (meme fond)
-        UI.contentDimSettings:SetShown(UI.viewMode == "options" or UI.viewMode == "faq" or UI.viewMode == "home")
+        UI.contentDimSettings:SetShown(UI.viewMode == "options" or UI.viewMode == "faq" or UI.viewMode == "home"
+            or UI.viewMode == "spells")
     end
     UI.LayoutContentBg()
 end
@@ -2095,8 +2106,8 @@ local function Build()
     -- Onglet "Defs" (liste des defensifs) : bouton RETIRE de la barre d'outils, et le code
     -- de la vue "deflist" a ete supprime le 2026-08-26 (il n'etait plus atteignable).
     --
-    -- ORDRE : donjons | Catalogue + Import | Settings. Les deux outils de PLAN (en trouver
-    -- un, en coller un) sont voisins ; le divider qui suit les separe des Settings, qui ne
+    -- ORDRE : donjons | Catalogue + Import + Spells | Settings. Les outils de PLAN (en trouver
+    -- un, en coller un, la bibliotheque de sorts) sont voisins ; le divider qui suit les separe des Settings, qui ne
     -- parlent que d'affichage. Il marque une difference de NATURE, pas une hierarchie.
 
     -- FAQ : masquee (contenu jamais ecrit -- la vue n'affiche que "coming soon"). Le mode
@@ -2142,6 +2153,21 @@ local function Build()
     StyleToolButton(importBtn)
     importBtn:SetPoint("TOP", UI.sidebar, "TOP", 0, -sy)
     AfterCatalog(importBtn, sy)
+    sy = sy + NAV_ICON + NAV_GAP
+
+    -- SPELLS : bibliotheque de sorts (natifs en lecture seule + sorts CUSTOM du joueur, cf.
+    -- UI/SpellLibrary.lua). Une VUE (`.mode`), groupee avec les outils de PLAN : la
+    -- bibliotheque est une donnee de plan, pas un reglage d'affichage.
+    local spellsBtn = NavButton({
+        image   = HR.Asset("icon-spells"),
+        size    = NAV_ICON,
+        onClick = function() UI.SetViewMode("spells") end,
+    }, "Spells: native and custom spells")
+    spellsBtn.mode = "spells"
+    StyleToolButton(spellsBtn)
+    spellsBtn:SetPoint("TOP", UI.sidebar, "TOP", 0, -sy)
+    AfterCatalog(spellsBtn, sy)
+    UI.viewButtons[#UI.viewButtons + 1] = spellsBtn
     sy = sy + NAV_ICON + NAV_GAP
 
     -- Separateur : outils de plan au-dessus, reglages d'affichage en dessous.

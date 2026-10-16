@@ -296,7 +296,9 @@ end
 local function BuildDefIndex()
     local idx = {}
     for key, d in pairs(HR.defensives) do
-        local sid = d.spellID or (type(key) == "number" and key or nil)
+        -- Jamais un sort CUSTOM : il n'existe que dans la bibliotheque de CE joueur, un plan
+        -- venu d'ailleurs ne peut pas le designer (Core/CustomSpells.lua).
+        local sid = (not d.custom) and (d.spellID or (type(key) == "number" and key or nil)) or nil
         if sid then
             idx[sid] = idx[sid] or {}
             table.insert(idx[sid], key)

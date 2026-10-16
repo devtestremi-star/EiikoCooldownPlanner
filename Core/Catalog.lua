@@ -153,7 +153,9 @@ local function sanitizeEntry(w, packDID)
         dID          = w.dID,
         externals    = HR.Share.SanitizeExternals(w.ext),
         talentSpells = (type(w.tsp) == "table") and HR.DeepCopy(w.tsp) or {},
-        assignments  = HR.Share.SanitizeAssignments(w.dID, w.asg),
+        -- Sans les sorts `noSync` : ils ne quittent jamais la DB de leur auteur, et un pack
+        -- produit hors de BuildPayload (Packager) pourrait encore les porter.
+        assignments  = HR.Share.SanitizeAssignments(w.dID, (HR.Share.StripNoSync(w.asg))),
     }
 end
 
