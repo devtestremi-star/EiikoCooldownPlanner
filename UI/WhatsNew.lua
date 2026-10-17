@@ -23,6 +23,11 @@ local SECTIONS = {
         text  = "Now available as an external when a Warlock is in your group.",
     },
     {
+        title = "Boss timings",
+        text  = "Adderis and Aspix, Mchimba the Embalmer and Ikuzz the Light Hunter have new "
+             .. "timings. If you planned cooldowns on them, check your plans.",
+    },
+    {
         title = "Web planner",
         text  = "Import a plan from a Warcraft Logs report via https://ecplanner.vercel.app "
              .. "(link in the Web planner button at the bottom of the main window).",

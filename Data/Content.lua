@@ -761,14 +761,29 @@ local content_1210 = {
                 -- Overload 39. (L'ancien releve manuel donnait 5 / 10 / 26 / 36 avec du jitter ; il est
                 -- remplace par ces valeurs.) L'ANCRE de phase est donc Gale Force (plus petit firstAt)
                 -- -> un cycle = 5, 9, 29, 39 puis +45.
-                -- TIMELINE : les 3 premiers sont AFFICHES, Overload est EXCLU (allowInTimeline = false)
-                -- mais reste PLANIFIABLE (allowedInPlan = true, c'est tout l'interet des 2 flags).
+                -- REVISION (2026-10-17) sur 3 logs Warcraft Logs, debuts de cast :
+                --   Thunder and Lightning 14 / 62 / 111 / 160      (les 3 logs, a 1 s pres)
+                --   Overload              38 / 86 / 136 / 185      (les 3 logs, a 1 s pres)
+                --   Gale Force            9 puis 55..67 / 105..118 / 154..159 (irregulier)
+                --   Tempest Winds         42/90/141 | 40/87/138/178 | 30/78/128/174 -> VARIE de 30 a 42
+                -- => period 45 -> 49 pour les 4 sorts (3 logs concordants ; le 45 venait peut-etre d'un
+                --    combat ou un boss est mort tot). Tempest Winds garde 29 : a 42 il etait annonce
+                --    ~12 s EN RETARD dans le log 3 ; a 29 il est annonce en avance (+10..+14) dans les
+                --    deux autres, le sens le moins risque. Cycle : 9, 13, 29, 38 puis +49 -> l'ordre
+                --    GF / T&L / TW / Overload de durationGroups[42] reste juste.
+                -- Apres ~150-190 s la rotation change (Overload et T&L disparaissent, GF et TW
+                -- accelerent jusqu'a ~19 s) : mort d'un boss, non modelisable ici.
+                -- TIMELINE : les 3 premiers sont AFFICHES et planifiables ; Overload est RETIRE (cf. plus bas).
                 -- Gale Force / Thunder and Lightning n'ont pas de `cast` ni de `defMarker` releves
                 -- (defensif pose au temps du sort) ni de `aoe` confirme -> a completer.
-                { spellID = 1289059, name = "Gale Force",            firstAt = 5,  period = 45,                                                                                        allowedInPlan = true, allowInTimeline = true,  durations = { 1, 5 } },
-                { spellID = 1288049, name = "Thunder and Lightning", firstAt = 9,  period = 45,                                                                                        allowedInPlan = true, allowInTimeline = true,  durations = { 4, 9 } },
-                { spellID = 1288864, name = "Tempest Winds",         firstAt = 29, period = 45, cast = 3, defMarker = { mode = "AFTER_CAST_END", offset = 0 },     aoe = true,         allowedInPlan = true, allowInTimeline = true,  durations = { 12, 21, 26 } },
-                { spellID = 1288428, name = "Overload",              firstAt = 39, period = 45, cast = 5, defMarker = { mode = "AFTER_CAST_END", offset = -2000 }, aoe = true,         allowedInPlan = true, allowInTimeline = false, durations = { 31, 36 } }, -- EXCLU de la timeline
+                { spellID = 1289059, name = "Gale Force",            firstAt = 9,  period = 49,                                                                                        allowedInPlan = true, allowInTimeline = true,  durations = { 1, 5 } },
+                { spellID = 1288049, name = "Thunder and Lightning", firstAt = 13, period = 49,                                                                                        allowedInPlan = true, allowInTimeline = true,  durations = { 4, 9 } },
+                { spellID = 1288864, name = "Tempest Winds",         firstAt = 29, period = 49, cast = 3, defMarker = { mode = "AFTER_CAST_END", offset = 0 },     aoe = true,         allowedInPlan = true, allowInTimeline = true,  durations = { 12, 21, 26 } },
+                -- Overload RETIRE du plan ET de la timeline (decision 2026-10-17) : entree duration-only
+                -- (pas de firstAt), comme Regurgitate (Rav'i). Ses durees restent reconnues en live
+                -- (et il garde sa place dans durationGroups[42]) mais il n'est plus affiche nulle part.
+                -- Pour memoire : debut de cast 38 puis +49, cast 5 s, aoe.
+                { spellID = 1288428, name = "Overload",              durations = { 31, 36 }, allowInTimeline = false }, -- EXCLURE
             }, durationGroups = {
                 -- dur 42 = timer de cycle PARTAGE par les 4 sorts, dans l'ordre de la rotation.
                 [42] = { 1289059, 1288049, 1288864, 1288428 },
@@ -857,15 +872,22 @@ local content_1210 = {
                 --     Offsets recalcules par base de cycle (5 / 40.25 / 75.5 / 110.75 / 146) :
                 --     +15 / +11.75 / +18.5 / (+16.25) / +15  -> moyenne ~15, jitter +-3.5 s.
                 --   * Awakening Slam NON : mesure a 30 puis 125, soit 95 s = 2.7 cycles. Il a donc
-                --     sa PROPRE phase (firstAt 30, period 95).
-                --     ⚠️ 95 ne repose que sur DEUX observations -> a reconfirmer sur un pull plus long.
+                --     sa PROPRE phase (firstAt 30).
+                -- Log Warcraft Logs (2026-10-17), temps de cast :
+                --   Drain Fluids 8 / 40 / 75 / 108 / 141 / 174 / 207 -> ~33 s (32/35/33/33/33/33)
+                --   Burn Corruption 25 / 55 / 91 / 122 / 158 / 188 / 221 -> +14..+17 apres Drain Fluids
+                --   Awakening Slam 33 / 100 / 167 -> 67 s EXACT | Entomb 64 / 130 / 197 (~31 s apres le Slam)
+                -- => Rotation 35.25 -> 33.5 (compromis entre ce log ~33.2 et le releve joueur 35.25 :
+                --    35.25 annoncait jusqu'a ~10 s TROP TARD en fin de combat sur ce log).
+                -- => Awakening Slam 95 -> 67 (95 ne reposait que sur 2 observations ; Entomb, deja releve
+                --    a 65 / 134, confirme un cycle ~67). Decision joueur : firstAt 30 conserve.
                 -- NB : 2 phases => les instances des deux sont fusionnees puis numerotees par ordre de
                 -- debut (GenerateFromPhases), donc les separateurs "Phase N" de l'editeur s'intercalent.
-                { name = "Rotation", firstAt = 5, period = 35.25, events = {
+                { name = "Rotation", firstAt = 5, period = 33.5, events = {
                     { spellID = 267618,  name = "Drain Fluids",    at = 0,  cast = 0, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, allowedInPlan = true, allowInTimeline = true },
                     { spellID = 1311956, name = "Burn Corruption", at = 15, cast = 0, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, allowedInPlan = true, allowInTimeline = true },
                 } },
-                { name = "Awakening Slam", firstAt = 30, period = 95, events = {
+                { name = "Awakening Slam", firstAt = 30, period = 67, events = {
                     { spellID = 1312146, name = "Awakening Slam", at = 0, cast = 0, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, allowedInPlan = true, allowInTimeline = true },
                 } },
             }, abilities = {
@@ -962,12 +984,15 @@ local content_1210 = {
                 --     c'est ce qui expliquait les "6 annonces sur 2 cycles pour 4 prevues".
                 --     Cycle 1 mesure a 6/35/64 = les 3 offsets exacts. Les 2 releves suivants
                 --     recoupent : 127 (cycle 2 +58 = 129) et 164 (cycle 3 +29 = 165), a ~2 s.
+                -- ⚠️ CORRIGE (2026-10-17, log Warcraft Logs + confirmation joueur) : le point (2) etait
+                --     FAUX. Verdant Stomp ne caste que 2x par cycle, a +0 / +29 (debuts de cast 7 / 36,
+                --     70 / 99, 135 / 164, 198 / 226). Le Stomp a +58 n'existe pas : il creait un
+                --     enchainement 35 / 64 / 71 dont celui du milieu etait hallucine -> retire.
                 -- Offset du sort display-only, pour memoire : Bloodthirsty Gaze +44.
                 { name = "Rotation", firstAt = 6, period = 65, events = {
                     { spellID = 1236746, name = "Verdant Stomp",    at = 0,  cast = 3, defMarker = { mode = "AFTER_CAST_END", offset = -2000 }, allowedInPlan = true, allowInTimeline = true },
                     { spellID = 1236709, name = "Thorncaller Roar", at = 16, cast = 2, defMarker = { mode = "AFTER_CAST_END", offset = 0 },     allowedInPlan = true, allowInTimeline = true },
                     { spellID = 1236746, name = "Verdant Stomp",    at = 29, cast = 3, defMarker = { mode = "AFTER_CAST_END", offset = -2000 }, allowedInPlan = true, allowInTimeline = true },
-                    { spellID = 1236746, name = "Verdant Stomp",    at = 58, cast = 3, defMarker = { mode = "AFTER_CAST_END", offset = -2000 }, allowedInPlan = true, allowInTimeline = true },
                 } },
             }, abilities = {
                     { spellID = 1236746, name = "Verdant Stomp",    durations = { 6, 29 } },
