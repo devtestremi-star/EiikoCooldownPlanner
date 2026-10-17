@@ -109,7 +109,7 @@ end
 -- (sinon repli de demo : AMZ / Celestial Conduit).
 function HR.PlayAlertSound(id, spoken)
     if id == nil then return end
-    if id == TTS_DEF then HR.SpeakTTS("Defensive")
+    if id == TTS_DEF then HR.SpeakTTS(spoken or "Defensive")
     elseif id == TTS_EXT then HR.SpeakTTS(spoken or "Anti Magic Zone")
     elseif id == TTS_CD then HR.SpeakTTS(spoken or "Celestial Conduit")
     elseif type(id) == "number" then PlaySound(id, AlertChannel()) end
@@ -140,12 +140,13 @@ local function fireAlert(token)
     if not o then return end
     local d = HR.ResolveDefEntry(token)
     if not HR.PlayerCanUseDefensive(d) then return end   -- requis de TOI uniquement
-    if d and d.external then
+    if d and d.external and not d.everyone then
         if o.alertExtEnabled then HR.PlayAlertSound(o.alertExtSound, SpokenName(token)) end
     elseif d and d.role == "HEALER" then
         if o.alertHealEnabled then HR.PlayAlertSound(o.alertHealSound, SpokenName(token)) end
     else
-        if o.alertDefEnabled then HR.PlayAlertSound(o.alertDefSound) end
+        -- Appel defensif. `everyone` (Healthstone) : meme son, mais la voix dit son nom.
+        if o.alertDefEnabled then HR.PlayAlertSound(o.alertDefSound, d and d.everyone and SpokenName(token) or nil) end
     end
 end
 

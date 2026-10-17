@@ -706,7 +706,7 @@ function ST.ApplyBoss(resolved, variant, encID)
         -- Sorts custom recus (export natif d'un boss) -> bibliotheque, sur le bloc QU'ON VIENT
         -- d'ecrire seulement (Core/CustomSpells.lua). Sans effet pour le format texte.
         local CS = HR.CustomSpells
-        if CS then CS.ReportAdoption(CS.AdoptInto({ [encID] = incoming }, variant.healer)) end
+        if CS then CS.ReportAdoption(CS.AdoptInto({ [encID] = incoming }, variant.healer, variant)) end
     end
     return true
 end

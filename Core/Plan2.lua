@@ -582,7 +582,7 @@ function HR.V2_DuplicateVariant(name)
     -- La copie devient MODIFIABLE : les sorts custom recus qu'elle porte (plan Sync ou
     -- catalogue duplique) entrent dans la bibliotheque, tokens remplaces dans la COPIE seule.
     local CS = HR.CustomSpells
-    if CS then CS.ReportAdoption(CS.AdoptInto(v.assignments, v.healer)) end
+    if CS then CS.ReportAdoption(CS.AdoptInto(v.assignments, v.healer, v)) end
     s.variants[id] = v
     s.lastSeen = id
     return v

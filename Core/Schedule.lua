@@ -21,7 +21,7 @@ local LINGER = 2   -- (s) on garde un defensif un court instant apres son temps 
 --                           recoit JAMAIS de directive de CD perso, uniquement les externals).
 --   * suffixe "@heal"    -> copie portee par le HEAL (ex. trinket Vessel) : mienne si je SUIS heal.
 --   * trinket (token nu) -> copie portee par un DPS : mienne si je NE suis PAS heal.
---   * everyone           -> appel de GROUPE (Healthstone) : mien pour tous, classe ignoree.
+--   * everyone           -> appel de GROUPE (Healthstone) : mien pour tous, via PlayerCanUseDefensive.
 --   * sinon              -> classe + role + spe via HR.PlayerCanUseDefensive (gere Zephyr
 --                           "374227:heal" role=HEALER vs "374227" external role=DAMAGER, et
 --                           tous les CD de classe ; un CD sans role reste class-only comme avant).
@@ -32,7 +32,6 @@ local function isMine(token)
     if token:find("@heal", 1, true) then return HR.GetPlayerRole() == "HEALER" end
     local d = HR.defensives[HR.DefKeyOf(token)]
     if not d then return false end
-    if d.everyone then return true end                     -- appel de groupe (Healthstone) : chacun l'utilise
     if d.trinket then return HR.GetPlayerRole() ~= "HEALER" end
     return HR.PlayerCanUseDefensive(d) == true
 end

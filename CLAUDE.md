@@ -338,7 +338,9 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   profil que le plan. Le flag décide, jamais un choix par placement. Le format web `ecp;2` est hors
   sujet pour l'instant (mis de côté par l'utilisateur).
   `everyone = true` = appel de GROUPE (Healthstone 6262, fournie par un Warlock, utilisée par
-  chacun) : `HR.TokenIsMine` le rend « mien » pour TOUS, `class` ne sert qu'au scan.
+  chacun) : traité au runtime comme un **appel défensif** (comme `SMALL_DEF`, tank compris) —
+  `HR.PlayerCanUseDefensive` vrai pour tous (donc « mien »), catégorie `personal` de l'Upcoming,
+  son « Defensive » (la voix TTS dit le nom), glow. `class` ne sert qu'au scan.
   `maxCount = n` = plafond du compte d'external : le scan (`HR.ScanGroupExternals`) ne dépasse
   jamais `n`, et `maxCount = 1` remplace le compteur +/- par une CASE À COCHER (clic sur l'icône,
   modale de compo `UI/HealerSpecs.lua`).

@@ -408,6 +408,10 @@ end
 -- Correspondance = meme profil, spellID, CD et charges. Un sort de la bibliotheque qui
 -- correspond est REUTILISE (son reglage de partage fait foi), et restaure s'il etait archive :
 -- le plan importe s'en sert. Sinon, creation ; partage = celui de l'auteur (`C:`/`N:`).
+-- `variant` (optionnel) = la variante qui recoit ces assignments : chaque sort adopte y est
+-- REACTIVE (retire de `customOff`). Sinon un sort que la variante desactivait serait place
+-- mais introuvable au picker, et V2_UpdateVariant purgerait ses placements a la sauvegarde
+-- suivante. Importer un plan qui s'en sert = le vouloir (decision du 2026-10-17).
 -- Renvoie { added = { noms }, linked = n }.
 
 local function findLibraryMatch(prof, sid, cd, ch)
@@ -422,7 +426,7 @@ local function findLibraryMatch(prof, sid, cd, ch)
     return best
 end
 
-function CS.AdoptInto(asg, healer)
+function CS.AdoptInto(asg, healer, variant)
     local res = { added = {}, linked = 0 }
     if type(asg) ~= "table" then return res end
     local map = {}                                   -- token de fil -> cle de bibliotheque
@@ -458,6 +462,11 @@ function CS.AdoptInto(asg, healer)
             end
         end
         map[wire] = key
+        local off = variant and variant.customOff
+        if off and off[key] then
+            off[key] = nil
+            if not next(off) then variant.customOff = nil end
+        end
         return key
     end
     for _, occs in pairs(asg) do

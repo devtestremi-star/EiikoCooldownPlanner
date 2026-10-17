@@ -44,8 +44,10 @@ HR.defensives = {
     [97462]       = { name = "Rallying Cry",            cooldown = 180, class = "WARRIOR", short = "Rally", external = true, talentReq = { 97462 } },
     -- Healthstone : BASELINE (pas de talentReq), fournie par un Demoniste mais UTILISEE PAR CHACUN
     -- -> appel de GROUPE. `class` ne sert qu'au SCAN (comptee si un Warlock est dans le groupe).
-    --   everyone = true : « mienne » pour TOUT le monde au runtime (HR.TokenIsMine), quelle que soit
-    --                     la classe -- sinon seul le Warlock verrait l'appel.
+    --   everyone = true : traitee au runtime comme un APPEL DEFENSIF (comme SMALL_DEF, tank compris) :
+    --                     HR.PlayerCanUseDefensive -> vrai pour tous (donc HR.TokenIsMine), categorie
+    --                     "personal" de l'Upcoming, son « Defensive » (Core/TTS.lua), glow. Sans ce
+    --                     flag, seul le Warlock verrait l'appel.
     --   maxCount = 1    : CASE A COCHER dans la compo (pas de compteur) et scan plafonne a 1 :
     --                     deux Warlocks ne font pas deux Healthstones a planifier.
     -- Cle = spellID d'utilisation (6262) ; itemId = l'objet (icone + tooltip).
@@ -300,6 +302,7 @@ end
 -- (ex. Vampiric Embrace = Shadow uniquement).
 function HR.PlayerCanUseDefensive(def)
     if not def then return false end
+    if def.everyone then return true end                        -- appel de groupe (Healthstone) : tous, tank compris
     if not def.class then return true end                       -- generique
     local _, pClass = UnitClass("player")
     if def.class ~= pClass then return false end

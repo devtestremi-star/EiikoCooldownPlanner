@@ -1741,7 +1741,7 @@ function UI.ImportNativeVariant(payload)
     -- Le plan importe est A MOI et modifiable : ses sorts custom recus entrent dans ma
     -- bibliotheque (variante NEUVE, tokens remplaces en place). Pas dans ImportPayload : le
     -- Sync la partage et ne doit PAS adopter.
-    local adopted = HR.CustomSpells and HR.CustomSpells.AdoptInto(v.assignments, v.healer)
+    local adopted = HR.CustomSpells and HR.CustomSpells.AdoptInto(v.assignments, v.healer, v)
     -- Aller sur le donjon de la variante (si different) puis la SELECTIONNER comme EDITEE.
     local idx
     for i, d in ipairs(HR.content) do if d.id == dID then idx = i; break end end

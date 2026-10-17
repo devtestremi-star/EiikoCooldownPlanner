@@ -48,8 +48,10 @@ end
 
 -- Chaine d'export partageable d'une variante (MEME encodage que le Share : CBOR -> Deflate ->
 -- Base64). Sert a l'export hors-groupe (copier/coller) ET a la poussee Sync. nil si echec.
--- Les sorts `noSync` n'y figurent JAMAIS (cf. BuildPayload). `opts` est transmis tel quel a
--- BuildPayload et n'y change plus rien (vestige de l'epoque ou seul le Sync filtrait).
+-- ⚠️ `opts` DECIDE DU CANAL (transmis tel quel a BuildPayload) : SANS `opts.full`, c'est le mode
+-- SYNC (defaut, le plus restrictif) -> sorts `noSync` retires, sorts custom non partages omis.
+-- Un EXPORT (chaine a copier, passee a un healer de la meme spe) DOIT passer `{ full = true }`,
+-- sinon il perd ces sorts sans le moindre avertissement (decision du 2026-10-16).
 -- `Share.BuildPayload` est definie plus bas -> resolue a l'appel (runtime), pas a la definition.
 function Share.EncodeVariant(dungeonID, variant, opts)
     local payload = Share.BuildPayload(dungeonID, variant, opts)

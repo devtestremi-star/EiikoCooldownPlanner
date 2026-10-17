@@ -104,7 +104,7 @@ local function LayoutDefIcons(defs)
         local pers = ResolvePersonalCall(def)
         b.tex:SetTexture(HR.GetDefensiveIcon(pers and pers.spellID or def))
         b.defName = (pers and pers.name) or (d and d.name) or nil
-        if pers ~= nil or (d ~= nil and d.class == playerClass) then HR.StartGlow(b, HR.CompGlow()) else HR.StopGlow(b) end
+        if pers ~= nil or (d ~= nil and (d.class == playerClass or d.everyone)) then HR.StartGlow(b, HR.CompGlow()) else HR.StopGlow(b) end
         b:ClearAllPoints()
         b:SetPoint("LEFT", box.vbar, "RIGHT", 8 + (i - 1) * (DEF_ICON + DEF_GAP), 0)
         b:Show()
@@ -184,7 +184,11 @@ local function PlayerPlanCDs(s)
         local defID = e.token
         local d = HR.defensives[HR.DefKeyOf(defID)]
         local time = e.eff - pull                         -- temps moteur (offset compris), relatif au pull
-        if d and d.external and HR.TokenIsMine(defID) then   -- rôle+@heal-conscient (copie heal vs dps)
+        if d and d.everyone then
+            -- Appel de GROUPE (Healthstone) : un appel defensif pour TOUS (pas un CD de raid).
+            cds[#cds + 1] = { defID = defID, time = time, name = d.name,
+                              icon = HR.GetDefensiveIcon(defID), kind = "personal" }
+        elseif d and d.external and HR.TokenIsMine(defID) then   -- rôle+@heal-conscient (copie heal vs dps)
             cds[#cds + 1] = { defID = defID, time = time, name = d.name,
                               icon = HR.GetDefensiveIcon(defID), kind = "external" }
         elseif Opt().upcomingHeals and d and IsHealToolkit(defID, d) and not d.external
