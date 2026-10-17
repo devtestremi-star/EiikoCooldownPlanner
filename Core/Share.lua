@@ -108,26 +108,23 @@ end
 -- repetes, sans interet pour le groupe) et les sorts CUSTOM du joueur (Core/CustomSpells.lua),
 -- qui n'existent que dans SA bibliotheque.
 --
--- REGLE : un sort `noSync` ne quitte JAMAIS la DB du joueur. Ni par le Sync, ni par l'Export,
--- ni par l'export d'un seul boss. Le laisser partir dans les exports etait un BUG (corrige le
--- 2026-10-15) -- c'est aussi ce qui rend les sorts custom surs : leurs cles (`U:<n>`) sont des
--- compteurs LOCAUX, le `U:1` d'un joueur n'est pas celui d'un autre.
+-- REGLE : un sort `noSync` ne part pas au SYNC (le groupe n'en a pas besoin). L'EXPORT, lui,
+-- emporte tout : il sert a passer un plan a un healer de la meme spe (decision du 2026-10-16,
+-- qui annule celle du 2026-10-15 ou l'export filtrait aussi). Un sort custom part toujours sous
+-- un token de fil, jamais sous sa cle `U:<n>` (compteur LOCAL) -- cf. OutgoingAssignments.
 local function isNoSync(token)
     local d = HR.defensives[HR.DefKeyOf(token)]
     return d and d.noSync == true
 end
 
--- Recopie d'assignments SANS les tokens `noSync`. Appelee aux DEUX frontieres : a l'emission
--- (BuildPayload / BuildBossPayload) et a la reception, juste apres le decodage (PlanSync, import
--- natif UI.ImportVariantString, catalogue) -- la reception couvre les chaines produites par une
--- version anterieure ou par le Packager, et neutralise une cle custom etrangere qui tomberait
--- sur une des notres. NOUVELLE table a chaque niveau (encounter,
--- occurrence, liste) : la source -- `variant.assignments` cote emetteur -- n'est JAMAIS touchee
--- (regle absolue sur les donnees sauvegardees). Les entrees gardees sont recopiees TELLES QUELLES
--- (pas de normalisation : c'est le role de SanitizeAssignments, qui passe derriere). Une
--- occurrence ou un boss vide apres filtrage n'est pas ecrit -> payload plus petit.
+-- Recopie filtree d'assignments. `fn(token)` renvoie le token a garder (le meme, ou un token
+-- REECRIT) ou nil pour retirer l'entree. NOUVELLE table a chaque niveau (encounter, occurrence,
+-- liste) : la source -- `variant.assignments` cote emetteur -- n'est JAMAIS touchee (regle
+-- absolue sur les donnees sauvegardees). Une entree gardee telle quelle est recopiee TELLE QUELLE
+-- (pas de normalisation : c'est le role de SanitizeAssignments, qui passe derriere) ; une entree
+-- reecrite devient { token, [offset] }. Une occurrence ou un boss vide n'est pas ecrit.
 -- Renvoie la copie et le nombre d'entrees retirees.
-function Share.StripNoSync(asg)
+local function filterAssignments(asg, fn)
     local out, dropped = {}, 0
     if type(asg) ~= "table" then return out, 0 end
     for encID, occs in pairs(asg) do
@@ -137,7 +134,16 @@ function Share.StripNoSync(asg)
                 if type(defs) == "table" then
                     local list = {}
                     for _, e in ipairs(defs) do
-                        if isNoSync(HR.EntryToken(e)) then dropped = dropped + 1 else list[#list + 1] = e end
+                        local t = HR.EntryToken(e)
+                        local keep = fn(t)
+                        if keep == nil then
+                            dropped = dropped + 1
+                        elseif keep == t then
+                            list[#list + 1] = e
+                        else
+                            local off = HR.EntryOffset(e)
+                            list[#list + 1] = (off ~= 0) and { token = keep, offset = off } or { token = keep }
+                        end
                     end
                     if #list > 0 then encOut = encOut or {}; encOut[occKey] = list end
                 end
@@ -148,15 +154,50 @@ function Share.StripNoSync(asg)
     return out, dropped
 end
 
+-- DEUX CANAUX, DEUX REGLES (decision du 2026-10-16) :
+--   * SYNC  (`full` absent) : informe le GROUPE -> les `noSync` restent chez le joueur.
+--   * EXPORT (`full = true`) : transmet le plan a un autre healer de la MEME spe -> TOUT part,
+--     sorts de gestion et sorts custom non partages compris. Export de variante, export d'un
+--     boss, et donc catalogue (fait d'exports de createurs).
+
+-- EMISSION. Un sort CUSTOM part sous son token de fil (`C:` partage / `N:` non partage, ce
+-- dernier a l'export seulement) -- sa cle `U:<n>` ne voyage jamais (Core/CustomSpells.lua).
+-- Au Sync, tout autre token `noSync` est retire (un `N:` recu compris).
+function Share.OutgoingAssignments(asg, full)
+    local CS = HR.CustomSpells
+    return filterAssignments(asg, function(t)
+        local key = HR.DefKeyOf(t)
+        if CS and CS.IsCustomKey(key) then return CS.WireToken(key, full) end
+        if not full and isNoSync(t) then return nil end
+        return t
+    end)
+end
+
+-- RECEPTION, juste apres le decodage : PlanSync (Sync), import natif UI.ImportVariantString et
+-- catalogue `sanitizeEntry` (`full`). Toujours retires : toute cle de bibliotheque `U:<n>` (celle
+-- d'un autre joueur tomberait sur une des NOTRES) et un token de fil illisible ou d'un autre
+-- profil de heal que le plan (`healer`). Au Sync seulement : les `noSync` (`N:` compris) --
+-- un emetteur en version anterieure ne les filtrait pas.
+function Share.IncomingAssignments(asg, healer, full)
+    local CS = HR.CustomSpells
+    return filterAssignments(asg, function(t)
+        local key = HR.DefKeyOf(t)
+        if CS and CS.IsCustomKey(key) then return nil end
+        if CS and CS.IsWireKey(key) and CS.ParseWire(key) ~= healer then return nil end
+        if not full and isNoSync(t) then return nil end
+        return t
+    end)
+end
+
 -- Construit le payload partageable d'une variante (format V2 : healer + externals + plan).
 -- NB : pour les boss multi-timelines (ex. L'ura), les plans des DEUX variantes sont DEJA
 -- dans `asg` (cles d'occurrence prefixees par la variante). On ajoute `tlv` = la variante
 -- JOUEE choisie par l'emetteur, par boss, pour la transmettre aussi.
--- `asg` est TOUJOURS une COPIE sans les tokens `noSync` (cf. isNoSync) : export, Sync, tout.
--- `opts` n'est plus lu (`stripNoSync` etait l'ancien interrupteur, reserve au Sync).
+-- `asg` est TOUJOURS une COPIE passee par OutgoingAssignments. `opts.full` = EXPORT (tout part) ;
+-- sans lui = SYNC (les `noSync` restent). Le defaut est le canal le plus restrictif.
 function Share.BuildPayload(dungeonID, variant, opts)
     if not dungeonID or not variant then return nil end
-    local asg = Share.StripNoSync(variant.assignments)
+    local asg = Share.OutgoingAssignments(variant.assignments, opts and opts.full)
     local tlv
     for _, d in ipairs(HR.content) do
         if d.id == dungeonID then
@@ -197,12 +238,13 @@ end
 --
 -- `name` voyage mais n'est PAS ecrit a l'import : la variante de destination garde le sien.
 -- Il ne sert qu'a l'ecran de confirmation.
--- Sans les tokens `noSync`, comme BuildPayload. Un boss dont il ne reste rien n'a pas de plan.
-function Share.BuildBossPayload(dungeonID, variant, encID)
+-- Filtre d'emission comme BuildPayload (`opts.full` = export). Un boss dont il ne reste rien
+-- n'a pas de plan.
+function Share.BuildBossPayload(dungeonID, variant, encID, opts)
     if not dungeonID or not variant or encID == nil then return nil end
     local src = variant.assignments and variant.assignments[encID]
     if type(src) ~= "table" or not next(src) then return nil end
-    local asg = Share.StripNoSync({ [encID] = src })[encID]
+    local asg = Share.OutgoingAssignments({ [encID] = src }, opts and opts.full)[encID]
     if not asg then return nil end
     return {
         v        = PROTO,
@@ -218,8 +260,8 @@ function Share.BuildBossPayload(dungeonID, variant, encID)
 end
 
 -- Chaine d'export du plan d'un seul boss. nil si le boss n'a aucun placement.
-function Share.EncodeBossPlan(dungeonID, variant, encID)
-    local payload = Share.BuildBossPayload(dungeonID, variant, encID)
+function Share.EncodeBossPlan(dungeonID, variant, encID, opts)
+    local payload = Share.BuildBossPayload(dungeonID, variant, encID, opts)
     if not payload then return nil end
     return Share.EncodeRaw(payload)
 end

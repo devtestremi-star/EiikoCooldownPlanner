@@ -21,8 +21,22 @@ local function PrintHelp()
     HR:Print("  " .. HR.COLORS.YELLOW .. "/ecp comms" .. HR.COLORS.RESET .. "   - probes YOUR OWN casts: which cooldown fields stay readable (on/off/all/status)")
 end
 
+-- MODE DEV : interrupteur des features pas encore livrees. Lecture : `if HR.IsDevMode() then`.
+-- Persiste au /reload (HealPlannerDB.devMode). Distinct de HR.debug (messages + echo solo du Sync).
+function HR.IsDevMode() return HR.devMode == true end
+
 local dispatch = {
     help = PrintHelp,
+
+    -- CACHEE : volontairement absente de PrintHelp. Pas de garde -- qui la trouve l'utilise a
+    -- ses risques (decision de l'auteur). Un /reload est conseille : une UI deja construite
+    -- ne relit pas le flag.
+    devmode = function()
+        HR.devMode = not HR.devMode
+        HR.db.devMode = HR.devMode or nil
+        HR:Print("Dev mode " .. (HR.devMode and (HR.COLORS.GREEN .. "ON") or (HR.COLORS.RED .. "OFF"))
+            .. HR.COLORS.RESET .. ". /reload to apply everywhere.")
+    end,
     [""] = function() HR.UI.Toggle() end,
 
     config = function() HR.UI.Toggle() end,

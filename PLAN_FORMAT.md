@@ -238,16 +238,20 @@ signe que l'encodage des feuilles a été omis quelque part — corrigez là, pa
 
 ### Aiguillage à l'import
 
-Trois cas mutuellement exclusifs, testés dans cet ordre :
+Quatre cas mutuellement exclusifs, testés dans cet ordre :
 
 | Préfixe | Traitement |
 |---|---|
+| `ecp;<n>;catalog` | catalogue de plans d'un créateur (produit par l'outil d'auteur de l'addon, pas par vous) |
 | `ecp64:` | décoder le base64 → document `ecp;2` → parseur normal |
 | `ecp;` | document `ecp;2` direct |
-| autre | Base64/CBOR natif hérité (canal de partage en jeu, annexe A) |
+| autre | Base64/CBOR natif (Export / Sync en jeu, annexe A) |
 
-Aucune ambiguïté : `ecp64:` et `ecp;` divergent au 4ᵉ caractère, et l'alphabet Base64 ne
-contient ni `;` ni `:`.
+Le catalogue est testé **avant** `ecp;` : les deux commencent pareil, et c'est le `kind`
+(`catalog`) qui les sépare. Un document `ecp;2` n'a donc jamais le `kind` `catalog`.
+
+Aucune autre ambiguïté : `ecp64:` et `ecp;` divergent au 4ᵉ caractère, et l'alphabet
+Base64 ne contient ni `;` ni `:`.
 
 ---
 
@@ -644,6 +648,15 @@ sont ignorés sans erreur, mais alourdissent la ligne pour rien.
 choix : le format ne transporte que de vrais sorts. Ces annotations restent posées à la
 main dans l'addon — et sont donc **effacées** par un import de boss (§11.6).
 
+**Les sorts custom des joueurs.** Dans l'addon, un joueur peut ajouter à sa bibliothèque
+personnelle des sorts que l'addon ne connaît pas, avec **son** cooldown (un talent le
+réduit, etc.). Ces sorts n'existent que chez lui : le format ne peut pas les désigner.
+Un `defSpell` qui n'est pas dans la table du §14.3 est un écart (« absent du catalogue »),
+**même si** le joueur qui importe possède ce sort dans sa bibliothèque — l'addon ne fait
+jamais correspondre un spellID reçu à un sort custom, dont le cooldown est propre au
+joueur. Comme les appels génériques, ces placements restent posés à la main et sont
+**effacés** par un import de boss (§11.6).
+
 **Les compositions sans soigneur.** `h;` est obligatoire.
 
 **Le partage entre joueurs en jeu.** Il passe par un canal séparé et un encodage
@@ -750,6 +763,7 @@ Le prêtre est la seule classe à deux profils de soin. Paladin Sacré est une c
 ### 14.3 Défensifs reconnus
 
 Ce sont les seules valeurs acceptées pour `defSpell`. Tout autre spellID est un écart.
+La liste est **fermée** : la bibliothèque de sorts custom d'un joueur ne l'étend pas (§12).
 « Talents décisifs » indique les talents qui départagent les variantes de cooldown : si
 vous ne les remontez pas, la résolution échoue ou se trompe (§11.1).
 
@@ -1051,13 +1065,31 @@ Le **vecteur de référence** est l'exemple du §15.
 ## Annexe A — le canal natif (pour information)
 
 Le partage de plans **entre joueurs en jeu** n'utilise pas ce format. Il applique un
-encodage binaire natif Blizzard (CBOR → Deflate → Base64), découpé en messages addon.
-Deux détails non documentés par Blizzard le rendent risqué à réimplémenter :
-l'enveloppe exacte du Deflate, et la façon dont le CBOR natif sérialise les clés
-numériques d'une table Lua. C'est précisément pourquoi `ecp;2` existe.
+encodage binaire natif Blizzard (CBOR → Deflate → Base64). Deux détails non documentés par
+Blizzard le rendent risqué à réimplémenter : l'enveloppe exacte du Deflate, et la façon
+dont le CBOR natif sérialise les clés numériques d'une table Lua. C'est précisément
+pourquoi `ecp;2` existe. **Ne produisez pas ce format.**
 
-Les deux chemins cohabitent à l'import sans ambiguïté possible : une chaîne commençant
-par `ecp;` est parsée comme du texte, toute autre est traitée comme du Base64 natif —
+Il sert à deux canaux, qui n'emportent pas la même chose :
+
+- **Sync** (découpé en messages addon, poussé au groupe) : informe le groupe. Les sorts
+  marqués « non partagés » — sorts de gestion du soigneur, sorts custom que le joueur garde
+  pour lui — restent chez l'émetteur.
+- **Export** (chaîne copiable, bouton Export) : transmet un plan à un autre soigneur de la
+  même spé. **Tout** part, y compris ces sorts-là.
+
+Ce canal sait transporter les **sorts custom** (§12), sous forme de jetons
+auto-descriptifs internes (`C:<profil>:<spellID>:<cd>` / `N:…`). Ces jetons sont un
+détail interne au canal natif : ils n'ont **aucun** équivalent dans `ecp;2`. Une ligne
+`u;` qui en porterait un à la place d'un spellID est rejetée (champ numérique non
+convertible, §13).
+
+Un document `ecp;2`, lui, se comporte à l'import comme un **Export** : l'addon ne retire
+aucun sort valide.
+
+Les chemins cohabitent à l'import sans ambiguïté possible (cf. « Aiguillage à
+l'import », §5bis) : une chaîne commençant par `ecp;` est parsée comme du texte (ou comme
+un catalogue si son `kind` est `catalog`), toute autre est traitée comme du Base64 natif —
 l'alphabet Base64 URL-safe ne contient pas de `;`.
 
 ## Annexe B — ce qui change depuis `ecp;1`

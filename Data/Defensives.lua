@@ -19,13 +19,13 @@ local addonName, HR = ...
 --   talentRank = { [spellID] = n } : le talent doit etre a EXACTEMENT ce rang (talent a
 --     plusieurs points, ex. Call of the Righteous 1241511 : rang 1 = -15 s, rang 2 = -30 s).
 --     Le set de talents porte le rang comme valeur ({ [spellID] = rank }, cf. Plan2.lua).
---   noSync = true : sort NON PARTAGEABLE -- il ne quitte JAMAIS la DB du joueur. Sort de
---     GESTION du healer (court, tres repete, sans interet pour le groupe) ; les sorts CUSTOM du
---     joueur le portent aussi (Core/CustomSpells.lua). Placable dans le plan comme les autres,
---     mais retire de TOUT payload (Sync, Export, export d'un boss : Core/Share.lua
---     BuildPayload/BuildBossPayload) et a TOUTE reception (PlanSync, import natif, catalogue).
---     Jusqu'au 2026-10-15 l'Export et le catalogue le transportaient : c'etait un BUG. Decide
---     par le flag, jamais par placement. Aucun sort natif flagge pour l'instant.
+--   noSync = true : sort qui ne part PAS AU SYNC (le groupe n'en a pas besoin). Sort de
+--     GESTION du healer (court, tres repete) ; les sorts CUSTOM que le joueur ne partage pas le
+--     portent aussi (Core/CustomSpells.lua). Placable comme les autres ; retire a l'emission ET
+--     a la reception du Sync (Core/Share.lua, Outgoing/IncomingAssignments sans `full`). L'EXPORT
+--     (variante, boss, catalogue) l'emporte : il sert a passer le plan a un healer de la meme spe
+--     (decision du 2026-10-16). Decide par le flag, jamais par placement. Aucun sort natif
+--     flagge pour l'instant.
 -- (Matching par membre = a brancher dans ScanGroupExternals ; cf. note.)
 HR.defensives = {
     ----------------------------------------------------------------------------
@@ -42,6 +42,14 @@ HR.defensives = {
     ["374227:heal"] = { name = "Zephyr",                cooldown = 120, class = "EVOKER", role = "HEALER", aoeOnly = true, short = "Zeph", spellID = 374227, talentReq = { 374227 } },
     [15286]       = { name = "Vampiric Embrace",        cooldown = 120, class = "PRIEST", spec = "Shadow", short = "Vamp", external = true },
     [97462]       = { name = "Rallying Cry",            cooldown = 180, class = "WARRIOR", short = "Rally", external = true, talentReq = { 97462 } },
+    -- Healthstone : BASELINE (pas de talentReq), fournie par un Demoniste mais UTILISEE PAR CHACUN
+    -- -> appel de GROUPE. `class` ne sert qu'au SCAN (comptee si un Warlock est dans le groupe).
+    --   everyone = true : « mienne » pour TOUT le monde au runtime (HR.TokenIsMine), quelle que soit
+    --                     la classe -- sinon seul le Warlock verrait l'appel.
+    --   maxCount = 1    : CASE A COCHER dans la compo (pas de compteur) et scan plafonne a 1 :
+    --                     deux Warlocks ne font pas deux Healthstones a planifier.
+    -- Cle = spellID d'utilisation (6262) ; itemId = l'objet (icone + tooltip).
+    [6262]        = { name = "Healthstone",             cooldown = 60,  class = "WARLOCK", short = "HS", itemId = 5512, external = true, everyone = true, maxCount = 1 },
     -- Poison Cleansing Totem : talent de CLASSE (meme spellID que le sort), toute spe de shaman.
     -- Meme schema que Zephyr : porte par un Shaman DPS (external, role DAMAGER) OU par le heal
     -- Resto (entree ":heal", role HEALER, dans son toolkit). Macro EHP_PCT sur l'entree DPS.

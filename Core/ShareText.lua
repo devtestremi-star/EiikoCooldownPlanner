@@ -655,10 +655,17 @@ function ST.ValidateAgainstVariant(resolved, variant)
     end
     local ok = {}
     for _, e in ipairs(HR.GetPlaceableDefsFor(variant)) do ok[e.token] = true end
+    -- Sort custom PARTAGE par un autre joueur (token de fil `C:`, Core/CustomSpells.lua) : jamais
+    -- dans le picker (qui ne liste que NOTRE bibliotheque), mais placable dans une variante de sa
+    -- spe. Sans ce cas, un plan de boss qui en porte un serait refuse en bloc.
+    local CS = HR.CustomSpells
+    local function wireOk(token)
+        return CS and CS.IsWireKey(HR.DefKeyOf(token)) and HR.IsTokenPlaceable(variant, token)
+    end
 
     local seen = {}
     for _, t in ipairs(resolved.tokensByUse or {}) do
-        if not ok[t.token] and not seen[t.token] then
+        if not ok[t.token] and not wireOk(t.token) and not seen[t.token] then
             seen[t.token] = true
             local key  = HR.DefKeyOf(t.token)
             local name = DefName(key)
@@ -696,6 +703,10 @@ function ST.ApplyBoss(resolved, variant, encID)
     local incoming = resolved.assignments[encID]
     if incoming and next(incoming) then
         variant.assignments[encID] = incoming
+        -- Sorts custom recus (export natif d'un boss) -> bibliotheque, sur le bloc QU'ON VIENT
+        -- d'ecrire seulement (Core/CustomSpells.lua). Sans effet pour le format texte.
+        local CS = HR.CustomSpells
+        if CS then CS.ReportAdoption(CS.AdoptInto({ [encID] = incoming }, variant.healer)) end
     end
     return true
 end

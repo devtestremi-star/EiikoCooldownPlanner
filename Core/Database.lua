@@ -64,6 +64,9 @@ function HR:InitDB()
     HR.CleanupBaseVariants()
 
     HR.debug = self.db.debug    -- restaure le flag de debug (persiste au /reload)
+    -- MODE DEV : `/ecp devmode` (commande CACHEE, absente de /ecp help). Cle additive a la
+    -- RACINE de la DB (hors profil, comme `debug`). Lire via HR.IsDevMode().
+    HR.devMode = self.db.devMode and true or false
 
     -- Marqueur de session dans le devlog (si actif, persiste au /reload) : delimite les runs.
     if HR.DevLog then HR.DevLog("session", "--- InitDB (login/reload) v%s ---", tostring(HR.VERSION)) end

@@ -405,7 +405,17 @@ function UI.RenderCDPicker(encounterID, occ, uses)
         r.name:SetText(item.label)
         local g = ready and 1 or 0.55; r.name:SetTextColor(g, g, g)
 
-        r.time:SetText(ready and "" or string.format("|cffff3333(-%ds)|r", math.ceil(shortfall)))
+        -- A droite : le manque (-Xs, rouge) s'il y en a, puis la DUREE DU CD (gris) -- utile
+        -- pour departager deux versions d'un meme sort (variantes de CD, sorts custom).
+        -- Rien pour un appel sans CD (EMPTY_BAG, cd 0).
+        local d = HR.defensives[item.defKey]
+        local cdTxt = ""
+        if d and (d.cooldown or 0) > 0 then
+            cdTxt = "|cff999999" .. HR.FormatCooldown(d.cooldown)
+                .. ((d.charges and d.charges > 1) and (" x" .. d.charges) or "") .. "|r"
+        end
+        local missTxt = ready and "" or string.format("|cffff3333(-%ds)|r", math.ceil(shortfall))
+        r.time:SetText(missTxt .. ((missTxt ~= "" and cdTxt ~= "") and "  " or "") .. cdTxt)
         if r.force then r.force:Hide() end
         r.time:ClearAllPoints(); r.time:SetPoint("RIGHT", -8, 0)
         r.name:ClearAllPoints(); r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0); r.name:SetPoint("RIGHT", r.time, "LEFT", -6, 0)

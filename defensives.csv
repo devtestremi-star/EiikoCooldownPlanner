@@ -6,6 +6,7 @@ EXTERNAL,196718:1,196718,Darkness (3 min),DEMONHUNTER,,,,Dark,180,yes,,"196718, 
 EXTERNAL,374227,374227,Zephyr,EVOKER,,DAMAGER,,Zeph,120,yes,,374227,,aoeOnly
 EXTERNAL,15286,15286,Vampiric Embrace,PRIEST,Shadow,,,Vamp,120,yes,,,,
 EXTERNAL,97462,97462,Rallying Cry,WARRIOR,,,,Rally,180,yes,,97462,,
+EXTERNAL,6262,6262,Healthstone,WARLOCK,,,,HS,60,yes,,,,"BASELINE ; itemId 5512 ; everyone (mienne pour tous au runtime) ; maxCount 1 (case a cocher, scan = un Warlock dans le groupe)"
 HEAL,RAMP,,Ramp,,,HEALER,,Ramp,0,no,,,,
 HEAL,132158:0,132158,Nature's Swiftness (1 min),DRUID,,HEALER,,NS,60,no,,132158,382550,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"
 HEAL,132158:1,132158,Nature's Swiftness (45 sec),DRUID,,HEALER,,NS,45,no,,"132158, 382550",,"CLE HERITEE : ne pas renommer, presente dans les plans sauvegardes"

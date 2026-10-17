@@ -617,10 +617,20 @@ local function RenderExternalsRow(parent, pool, x0, y0, ext, onChange, readOnly,
             local it = pool[shown]
             if not it then it = CreateExtItem(parent); pool[shown] = it end
             setupExtIcon(it, e, n == 0)
-            if n > 0 then it.qty:SetText(n); it.qty:Show() else it.qty:Hide() end
-            it.plus:Show(); it.minus:Show()
-            it.plus:SetScript("OnClick", function() ext[e.key] = (ext[e.key] or 0) + 1; if onChange then onChange() end end)
-            it.minus:SetScript("OnClick", function() ext[e.key] = math.max(0, (ext[e.key] or 0) - 1); if onChange then onChange() end end)
+            local d = HR.defensives[e.key]
+            if d and d.maxCount == 1 then
+                -- CASE A COCHER (Healthstone) : clic sur l'icone = present / absent, pas de compteur.
+                it.qty:Hide(); it.plus:Hide(); it.minus:Hide()
+                it.btn:SetSelected(n > 0)
+                it.btn:SetOnClick(function() ext[e.key] = (n == 0) and 1 or nil; if onChange then onChange() end end)
+            else
+                if it.btn._selected then it.btn:SetSelected(false); it.btn.image:SetAlpha(1); setupExtIcon(it, e, n == 0) end
+                it.btn:SetOnClick(nil)
+                if n > 0 then it.qty:SetText(n); it.qty:Show() else it.qty:Hide() end
+                it.plus:Show(); it.minus:Show()
+                it.plus:SetScript("OnClick", function() ext[e.key] = (ext[e.key] or 0) + 1; if onChange then onChange() end end)
+                it.minus:SetScript("OnClick", function() ext[e.key] = math.max(0, (ext[e.key] or 0) - 1); if onChange then onChange() end end)
+            end
             it:ClearAllPoints(); it:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y0); it:Show()
             x = x + SPEC_ICON + 2 + EXT_BTN + EXT_GAP
         end
@@ -1242,8 +1252,9 @@ local function BuildNewVariantModal()
     end)
     UI.Components.AttachHelpTip(m.customPlus, "Add a custom spell",
         "Add a spell the addon doesn't know to this healer spec, with your own cooldown.\n\n"
-        .. "Lit icons = available in this variant; click one to disable it. Custom spells are "
-        .. "never shared: Sync and Export leave them out.")
+        .. "Lit icons = available in this variant; click one to disable it. A custom spell goes "
+        .. "with your plan on Sync only if you chose to share it (Spells section); Export always "
+        .. "includes it.")
     m.customEmpty = c:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     m.customEmpty:SetJustifyH("LEFT")
 
@@ -1633,13 +1644,6 @@ local function BuildExportModal()
     local ok = UI.Components.TextButton(c, { text = "Close", width = 120, onClick = function() m:Hide() end })
     ok:SetPoint("BOTTOMRIGHT", -16, 14)
 
-    -- Note optionnelle en bas a gauche (ex. placements non partageables laisses de cote).
-    m.note = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    m.note:SetPoint("BOTTOMLEFT", 16, 20)
-    m.note:SetPoint("RIGHT", ok, "LEFT", -12, 0)
-    m.note:SetJustifyH("LEFT")
-    m.note:SetTextColor(1, 0.82, 0)
-
     m:Hide()
     UI.exportModal = m
 end
@@ -1648,11 +1652,10 @@ end
 -- EXTRAITE de UI.OpenExportModal pour que d'autres exports -- le plan d'un seul boss depuis
 -- l'apercu de catalogue (memo §14) -- la reutilisent sans redupliquer la mecanique d'autocopie.
 -- Le titre est PARAMETRABLE : « Export variant » serait faux sur un plan de boss.
-function UI.ShowExportString(str, title, note)
+function UI.ShowExportString(str, title)
     if not UI.exportModal then BuildExportModal() end
     local m = UI.exportModal
     if title and m.title then m.title:SetText(title) end
-    m.note:SetText(note or "")
     m.exportStr = str or ""
     m.edit:SetText(str or "<export failed: encoding unavailable or no dungeon>")
     m:Show(); m:Raise()
@@ -1664,14 +1667,10 @@ function UI.OpenExportModal()
     if not cur then HR:Print("No variant to export."); return end
     local dID = UI.activeDungeonID
     if not dID then local d = HR.content and HR.content[UI.selDungeon]; dID = d and d.id end
-    local str = (HR.Share and HR.Share.EncodeVariant) and HR.Share.EncodeVariant(dID, cur) or nil
-    -- Les sorts `noSync` (gestion du healer, sorts custom) ne partent pas : on le DIT, sinon le
-    -- destinataire recoit un plan plus maigre que celui qu'on a sous les yeux, sans explication.
-    local _, dropped = HR.Share.StripNoSync(cur.assignments)
-    local note = (dropped > 0) and ("%d placement%s of non-shareable spells (custom spells, healer "
-        .. "management spells) %s not exported."):format(dropped, dropped > 1 and "s" or "",
-        dropped > 1 and "are" or "is") or nil
-    UI.ShowExportString(str, "Export variant", note)
+    -- Mode EXPORT (`full`) : TOUT part, `noSync` compris -- l'export sert a passer le plan a un
+    -- healer de la meme spe (Core/Share.lua). Rien n'est retire, donc plus de note a afficher.
+    local str = (HR.Share and HR.Share.EncodeVariant) and HR.Share.EncodeVariant(dID, cur, { full = true }) or nil
+    UI.ShowExportString(str, "Export variant")
     if not str then HR:Print("Export failed (encoding unavailable or no dungeon selected).") end
 end
 
@@ -1714,16 +1713,15 @@ function UI.ImportVariantString(str)
     if not HR.Share.ValidatePayload(payload) then
         HR:Print("Import failed: invalid or corrupted string."); return false
     end
-    -- Sorts `noSync` retires DES L'ENTREE, avant d'aiguiller : les deux routes (variante, boss)
-    -- les voient donc deja absents. Ils ne devraient pas y etre (BuildPayload les retire a
-    -- l'emission), sauf chaine d'une version anterieure -- ou cle custom etrangere (`U:<n>`)
-    -- qui tomberait sur un sort de NOTRE bibliotheque. AVANT la validation de la route boss :
-    -- ce n'est pas une reparation (memo §14.7), c'est l'emetteur qui ne les aurait jamais
-    -- envoyes ; apres, un tel sort non placable ferait refuser tout le plan pour rien.
-    -- `payload` est une table fraiche issue du decodage, pas la DB.
+    -- Filtre de reception en mode EXPORT (`full`) DES L'ENTREE, avant d'aiguiller : les `noSync`
+    -- RESTENT (l'export emporte tout), mais une cle custom etrangere (`U:<n>`, qui tomberait sur
+    -- un sort de NOTRE bibliotheque) et un token de fil d'un autre profil sont retires. AVANT la
+    -- validation de la route boss : ce n'est pas une reparation (memo §14.7), c'est l'emetteur
+    -- qui ne les aurait jamais envoyes ; apres, un tel sort non placable ferait refuser tout le
+    -- plan pour rien. `payload` est une table fraiche issue du decodage, pas la DB.
     local dropped
-    payload.asg, dropped = HR.Share.StripNoSync(payload.asg)
-    if dropped > 0 then HR:Debug("[import] noSync stripped:", dropped) end
+    payload.asg, dropped = HR.Share.IncomingAssignments(payload.asg, payload.healer, true)
+    if dropped > 0 then HR:Debug("[import] foreign custom keys stripped:", dropped) end
     -- Plan d'UN SEUL boss (memo §14) : MEME format, plus un drapeau. Route dediee, qui n'ecrit
     -- PAS de variante -- elle ecrase un boss dans celle que le joueur a sous les yeux.
     -- ⚠️ Le drapeau se lit ICI, AVANT ImportPayload : apres, la variante serait deja creee.
@@ -1740,6 +1738,10 @@ end
 function UI.ImportNativeVariant(payload)
     local v, dID = HR.Share.ImportPayload(payload, nil)
     if not v then HR:Print("Import failed: invalid plan."); return false end
+    -- Le plan importe est A MOI et modifiable : ses sorts custom recus entrent dans ma
+    -- bibliotheque (variante NEUVE, tokens remplaces en place). Pas dans ImportPayload : le
+    -- Sync la partage et ne doit PAS adopter.
+    local adopted = HR.CustomSpells and HR.CustomSpells.AdoptInto(v.assignments, v.healer)
     -- Aller sur le donjon de la variante (si different) puis la SELECTIONNER comme EDITEE.
     local idx
     for i, d in ipairs(HR.content) do if d.id == dID then idx = i; break end end
@@ -1747,6 +1749,7 @@ function UI.ImportNativeVariant(payload)
     HR.SelectVariant(v.id, dID)                        -- lastSeen = variante visible/editee
     UI.RefreshRows()
     HR:Print(("Variant \"%s\" imported."):format(v.name))
+    if adopted then HR.CustomSpells.ReportAdoption(adopted) end
     return true
 end
 

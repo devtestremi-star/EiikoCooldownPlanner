@@ -579,6 +579,10 @@ function HR.V2_DuplicateVariant(name)
         customOff    = cur.customOff and HR.DeepCopy(cur.customOff) or nil,
         -- PAS de `synced` ni de `syncFrom` : cf. l'avertissement ci-dessus.
     }
+    -- La copie devient MODIFIABLE : les sorts custom recus qu'elle porte (plan Sync ou
+    -- catalogue duplique) entrent dans la bibliotheque, tokens remplaces dans la COPIE seule.
+    local CS = HR.CustomSpells
+    if CS then CS.ReportAdoption(CS.AdoptInto(v.assignments, v.healer)) end
     s.variants[id] = v
     s.lastSeen = id
     return v
@@ -1151,6 +1155,13 @@ function HR.ScanGroupExternals()
                 end
             end
         end
+    end
+
+    -- Plafond `maxCount` (Healthstone = 1) : la presence d'un fournisseur suffit, deux Warlocks
+    -- ne doublent pas l'appel.
+    for key, n in pairs(result) do
+        local d = HR.defensives[key]
+        if d and d.maxCount and n > d.maxCount then result[key] = d.maxCount end
     end
     return result
 end

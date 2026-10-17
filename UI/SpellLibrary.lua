@@ -115,8 +115,9 @@ local function BuildPanel()
 
     p.info = C.InfoBox(p, { text = "Add the spells the addon doesn't know, with YOUR cooldown "
         .. "(a talent shortens it? set the real value). A custom spell belongs to one healer spec "
-        .. "and shows up in that spec's plans, where it can be disabled per variant. It is never "
-        .. "shared: Sync and Export leave it out." })
+        .. "and shows up in that spec's plans, where it can be disabled per variant. You choose, per "
+        .. "spell, whether it goes with your plan when you Sync it: share it only if your group needs "
+        .. "to know you will use it. Export always includes every spell." })
     p.info:SetPoint("TOPLEFT", PAD, -PAD); p.info:SetPoint("TOPRIGHT", -PAD, -PAD)
     p:SetScript("OnSizeChanged", function(_, w) if w and w > 0 then p.info:Relayout(w - PAD * 2) end end)
 
@@ -195,6 +196,10 @@ local function SpellRow(sec, i)
     r.arch:SetPoint("RIGHT", -4, 0)
     r.edit = C.TextButton(r, { text = "Edit", width = 56, height = 22 })
     r.edit:SetPoint("RIGHT", r.arch, "LEFT", -6, 0)
+    -- MODE DEV seulement (RenderCustom) : suppression definitive, apres confirmation.
+    r.del = C.TextButton(r, { text = "Delete", width = 62, height = 22 })
+    r.del:SetPoint("RIGHT", r.edit, "LEFT", -6, 0)
+    r.del:Hide()
     sec.rows[i] = r
     return r
 end
@@ -253,7 +258,7 @@ local function RenderNative(sec, profile)
             r.sub:SetText("")
             r.cd:ClearAllPoints(); r.cd:SetPoint("RIGHT", -10, 0)
             r.cd:SetText((d and d.cooldown and d.cooldown > 0) and fmtCD(d.cooldown) or "")
-            r.edit:Hide(); r.arch:Hide()
+            r.edit:Hide(); r.arch:Hide(); r.del:Hide()
             r:Show()
             y = y + ROW_H + 2
         end
@@ -266,6 +271,8 @@ end
 local function RenderCustom(sec, profile)
     for _, r in ipairs(sec.rows) do r:Hide() end
     local items = CS().List(profile, lib.showArchived)
+    local dev = HR.IsDevMode and HR.IsDevMode()
+    local textRight = dev and -278 or -210            -- place des boutons (+ Delete en mode dev)
     local y = 0
     for i, it in ipairs(items) do
         local key, e = it.key, it.entry
@@ -275,13 +282,16 @@ local function RenderCustom(sec, profile)
         r.icon:SetTexture(HR.GetDefensiveIcon(key)); r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         r.icon:SetDesaturated(e.archived and true or false)
         r.name:ClearAllPoints(); r.name:SetPoint("TOPLEFT", r.iconBtn, "TOPRIGHT", 8, 0)
-        r.name:SetPoint("RIGHT", r, "RIGHT", -210, 0)
+        r.name:SetPoint("RIGHT", r, "RIGHT", textRight, 0)
         r.name:SetText((e.name or "?") .. (e.archived and "  |cff808080(archived)|r" or ""))
         if e.archived then r.name:SetTextColor(0.6, 0.6, 0.6) else r.name:SetTextColor(1, 1, 1) end
         local used = CS().UsageCount(key)
-        r.sub:SetText(("Spell %d  -  %s"):format(e.spellID or 0,
-            used == 0 and "not placed in any plan" or ("used in %d plan%s"):format(used, used > 1 and "s" or "")))
-        r.cd:ClearAllPoints(); r.cd:SetPoint("RIGHT", r.edit, "LEFT", -12, 0)
+        r.sub:SetPoint("RIGHT", r, "RIGHT", textRight, 0) -- borne : sinon passe sous le CD/boutons
+        r.sub:SetWordWrap(false)
+        r.sub:SetText(("#%d  -  %s  -  %s"):format(e.spellID or 0,
+            e.shared and "|cff33dd66shared|r" or "private",
+            used == 0 and "unused" or ("in %d plan%s"):format(used, used > 1 and "s" or "")))
+        r.cd:ClearAllPoints(); r.cd:SetPoint("RIGHT", dev and r.del or r.edit, "LEFT", -12, 0)
         r.cd:SetText(fmtCD(e.cooldown) .. ((e.charges and e.charges > 1) and (" x" .. e.charges) or ""))
         r.edit:Show(); r.arch:Show()
         r.edit:SetOnClick(function()
@@ -292,6 +302,8 @@ local function RenderCustom(sec, profile)
             CS().SetArchived(key, not e.archived)
             UI.RenderSpellLibrary()
         end)
+        r.del:SetShown(dev and true or false)
+        r.del:SetOnClick(function() UI.ConfirmDeleteCustomSpell(key) end)
         r:Show()
         y = y + ROW_H + 2
     end
@@ -350,13 +362,31 @@ end
 -- Modale d'ajout / edition d'un sort custom
 --------------------------------------------------------------------------------
 
-local ED_W, ED_H = 470, 470
+local ED_W, ED_H = 470, 690
 
 local function NumberBox(parent, w)
     local e = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     e:SetSize(w, 24); e:SetAutoFocus(false); e:SetNumeric(true)
     e:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     return e
+end
+
+-- Echap ferme CETTE modale seulement. Surtout PAS UISpecialFrames : nos modales s'ouvrent
+-- par-dessus la modale Edit plan et la fenetre principale, qui y sont aussi -> un Echap les
+-- fermait toutes (et le brouillon de variante etait perdu). On mange la touche Echap, on laisse
+-- passer le reste. SetPropagateKeyboardInput est protege en combat : la on laisse passer.
+local function EscapeClosesOnlyMe(m)
+    m:EnableKeyboard(true)
+    m:SetPropagateKeyboardInput(true)
+    m:SetScript("OnKeyDown", function(self, key)
+        if InCombatLockdown() then return end
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            self:Hide()
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
 end
 
 local function BuildEditor()
@@ -366,7 +396,7 @@ local function BuildEditor()
     })
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
     m:SetFrameLevel(50)
-    tinsert(UISpecialFrames, "ECPCustomSpellModal")
+    EscapeClosesOnlyMe(m)
     local c = m.content
 
     local function Label(text, y)
@@ -456,9 +486,49 @@ local function BuildEditor()
     m.cdNote:SetPoint("RIGHT", c, "RIGHT", -16, 0)
     m.cdNote:SetJustifyH("LEFT")
 
-    -- 5. avertissements (non bloquants) / erreurs
+    -- 5. partage avec le groupe (non par defaut) -- cf. Core/CustomSpells.lua, PARTAGE.
+    -- ENCADRE a part : c'est la seule decision qui engage les AUTRES joueurs, elle ne doit pas
+    -- se lire comme un reglage de plus. L'aide est une FAQ (question -> Yes if / No if) ; la
+    -- hauteur du cadre suit le texte (UI.CustomSpellEditorRefresh).
+    local box = C.Container(c, { content = false, borderColor = HR.Theme.Color("SECTION_BORDER_COLOR") })
+    box:SetPoint("TOPLEFT", 16, -312); box:SetPoint("TOPRIGHT", -16, -312)
+    m.shareBox = box
+    m.shareChk = CreateFrame("CheckButton", nil, box, "UICheckButtonTemplate")
+    m.shareChk:SetSize(24, 24)
+    m.shareChk:SetPoint("TOPLEFT", 8, -8)
+    m.shareChk.text = m.shareChk:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    m.shareChk.text:SetPoint("LEFT", m.shareChk, "RIGHT", 2, 0)
+    m.shareChk.text:SetText("Share with my group"); m.shareChk.text:SetTextColor(1, 1, 1)
+    local function Para(font)
+        local fs = box:CreateFontString(nil, "OVERLAY", font)
+        fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP"); fs:SetWordWrap(true)
+        return fs
+    end
+    m.shareQ = Para("GameFontNormal")
+    m.shareQ:SetPoint("TOPLEFT", 14, -42)
+    m.shareQ:SetText("Should I check this box?")
+    m.shareYes = Para("GameFontHighlightSmall")
+    m.shareYes:SetPoint("TOPLEFT", m.shareQ, "BOTTOMLEFT", 0, -6)
+    m.shareYes:SetText("|cff33dd66Yes|r if your group needs to know you will use this spell, and "
+        .. "will play differently because of it. It goes with your plan when you Sync it, and shows "
+        .. "on their timeline.")
+    m.shareNo = Para("GameFontHighlightSmall")
+    m.shareNo:SetPoint("TOPLEFT", m.shareYes, "BOTTOMLEFT", 0, -6)
+    m.shareNo:SetText("|cffff6060No|r if it only matters to you. Your Syncs leave it out: your "
+        .. "group never sees it.")
+    -- L'Export emporte TOUT, coche ou non (Core/Share.lua) : on le dit, sinon le joueur croit
+    -- qu'un sort decoche ne sort jamais de chez lui.
+    m.shareExport = Para("GameFontDisableSmall")
+    m.shareExport:SetPoint("TOPLEFT", m.shareNo, "BOTTOMLEFT", 0, -6)
+    m.shareExport:SetText("Export always includes it, either way: an export is meant for another "
+        .. "healer of your spec.")
+    m.shareNote = Para("GameFontDisableSmall")
+    m.shareNote:SetPoint("TOPLEFT", m.shareExport, "BOTTOMLEFT", 0, -6)
+    m.shareNote:SetText("Changing this applies from your next Sync.")
+
+    -- 6. avertissements (non bloquants) / erreurs
     m.warn = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    m.warn:SetPoint("TOPLEFT", 16, -312)
+    m.warn:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -10)
     m.warn:SetPoint("RIGHT", c, "RIGHT", -16, 0)
     m.warn:SetJustifyH("LEFT"); m.warn:SetJustifyV("TOP")
     m.warn:SetTextColor(1, 0.82, 0)
@@ -506,6 +576,18 @@ function UI.CustomSpellEditorRefresh()
     local chOk = ch == nil or (ch >= 1 and ch <= cs.MAX_CHARGES)
     m.cdNote:SetText(m.editKey and "Changing the cooldown updates every plan that uses this spell."
         or "Set the cooldown you really have (talents included): the addon cannot read it.")
+
+    -- Encadre de partage : largeur de texte FIXEE (GetStringHeight fiable), hauteur = contenu.
+    local tw = (m.shareBox:GetWidth() or 0) - 28
+    if tw < 100 then tw = ED_W - 32 - 28 end
+    local h = 42
+    for _, fs in ipairs({ m.shareQ, m.shareYes, m.shareNo, m.shareExport }) do
+        fs:SetWidth(tw); h = h + fs:GetStringHeight() + 6
+    end
+    m.shareNote:SetWidth(tw)
+    m.shareNote:SetShown(m.editKey ~= nil)
+    if m.editKey then h = h + m.shareNote:GetStringHeight() + 6 end
+    m.shareBox:SetHeight(h + 6)
 
     -- Avertissements : on informe, on ne bloque pas.
     local w = {}
@@ -567,6 +649,7 @@ function UI.OpenCustomSpellEditor(opts)
         m.idBox:SetText(tostring(e.spellID)); m.idBox:Disable()
         m.idHint:SetText("To use another spell, add a new one.")
         m.cdBox:SetText(tostring(e.cooldown)); m.chBox:SetText(tostring(e.charges or 1))
+        m.shareChk:SetChecked(e.shared and true or false)
         -- Apercu depuis la bibliotheque (fonctionne meme si le client n'a pas le sort en cache),
         -- puis lecture du client pour la duree de base et les avertissements.
         m.info = { spellID = e.spellID, name = e.name, icon = e.icon, baseCooldown = 0, charges = 1, known = true }
@@ -598,6 +681,7 @@ function UI.OpenCustomSpellEditor(opts)
         m.idBox:Enable(); m.idBox:SetText("")
         m.idHint:SetText("Find it on Wowhead (the number in the spell URL).")
         m.cdBox:SetText(""); m.chBox:SetText("1")
+        m.shareChk:SetChecked(false)          -- non partage par defaut : le joueur choisit
     end
     -- Le CD saisi a la main n'est plus ecrase par une resolution tardive.
     m.cdBox:SetScript("OnEditFocusGained", function() m.cdTouched = true end)
@@ -614,6 +698,7 @@ function UI.SubmitCustomSpell()
         cooldown = tonumber(m.cdBox:GetText() or ""),
         charges  = tonumber(m.chBox:GetText() or "") or 1,
         profile  = m.profile,
+        shared   = m.shareChk:GetChecked() and true or false,
     }
     local key, why
     if m.editKey then
@@ -629,4 +714,47 @@ function UI.SubmitCustomSpell()
     m:Hide()
     if m.onSaved then m.onSaved(key) end
     if UI.RefreshRows then UI.RefreshRows() end
+end
+
+--------------------------------------------------------------------------------
+-- Suppression DEFINITIVE d'un sort custom -- MODE DEV (HR.IsDevMode)
+--------------------------------------------------------------------------------
+
+-- Modale MAISON (pas de StaticPopup) : la decision ecrit dans les plans du joueur. Elle annonce
+-- le nombre de placements retires avant qu'on clique.
+function UI.ConfirmDeleteCustomSpell(key)
+    if not (HR.IsDevMode and HR.IsDevMode()) then return end
+    local e = CS().Get(key); if not e then return end
+    local m = UI.customSpellDelete
+    if not m then
+        local C = UI.Components
+        m = C.Window(UIParent, { name = "ECPCustomSpellDelete", title = "Delete custom spell",
+            width = 400, height = 200, bgTexture = C.ModalBackgroundTexture() })
+        C.ModalBackground(m)
+        m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true); m:SetFrameLevel(60)
+        EscapeClosesOnlyMe(m)
+        local c = m.content
+        m.msg = c:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        m.msg:SetPoint("TOPLEFT", 16, -16); m.msg:SetPoint("RIGHT", c, "RIGHT", -16, 0)
+        m.msg:SetJustifyH("LEFT"); m.msg:SetJustifyV("TOP"); m.msg:SetSpacing(3)
+        m.yes = C.TextButton(c, { text = "Delete", width = 110, onClick = function()
+            local n = CS().Delete(m._key)
+            m:Hide()
+            if n == nil then HR:Print("Could not delete the spell (dev mode off?)."); return end
+            HR:Print(("Custom spell deleted (%d placement%s removed)."):format(n, n == 1 and "" or "s"))
+            UI.RenderSpellLibrary()
+            if UI.RefreshRows then UI.RefreshRows() end
+        end })
+        m.yes:SetPoint("BOTTOMRIGHT", -16, 16)
+        local no = C.TextButton(c, { text = "Cancel", width = 110, onClick = function() m:Hide() end })
+        no:SetPoint("RIGHT", m.yes, "LEFT", -8, 0)
+        m:Hide()
+        UI.customSpellDelete = m
+    end
+    m._key = key
+    local n = CS().PlacementCount(key)
+    m.msg:SetText(("|cffff6060Dev mode.|r Delete \"%s\" for good?\n\n%s\nThis cannot be undone.")
+        :format(e.name or "?", n == 0 and "It is not placed in any plan."
+            or ("Its %d placement%s will be removed from your plans."):format(n, n == 1 and "" or "s")))
+    m:Show(); m:Raise()
 end

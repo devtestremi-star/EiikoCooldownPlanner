@@ -224,7 +224,7 @@ function UI.ShowCatalogPreview(entry, creator)
                 btn:SetScript("OnClick", function()
                     local e = m.entry
                     local str = e and HR.Share and HR.Share.EncodeBossPlan
-                                  and HR.Share.EncodeBossPlan(e.dID, e, encID) or nil
+                                  and HR.Share.EncodeBossPlan(e.dID, e, encID, { full = true }) or nil
                     if not str then HR:Print("Export failed: this boss has no plan."); return end
                     UI.ShowExportString(str, "Export boss plan")
                 end)

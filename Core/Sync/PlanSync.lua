@@ -52,10 +52,10 @@ end
 -- (HR.Share.EncodeVariant : BuildPayload -> CBOR -> Deflate -> Base64) ; l'id distant
 -- voyage dans le corps de la trame, PAS dans le CBOR, pour ne rien changer au format du
 -- canal de partage deja deploye chez les joueurs.
--- Les sorts flagges `noSync` (Data/Defensives.lua -- gestion du healer ; sorts custom du
--- joueur) ne TRANSITENT PAS : BuildPayload les retire toujours, Sync comme export. Le plan
--- LOCAL les garde intacts (le filtre travaille sur une copie). `stripNoSync` ci-dessous est
--- l'ancien interrupteur, desormais sans effet -- conserve pour la lisibilite de l'intention.
+-- Les sorts flagges `noSync` (Data/Defensives.lua -- gestion du healer ; sorts custom NON
+-- partages du joueur) ne TRANSITENT PAS : sans `opts.full`, BuildPayload est en mode SYNC et
+-- les retire (seul l'Export les emporte). Le plan LOCAL les garde intacts (le filtre travaille
+-- sur une copie). Un sort custom partage part sous son token de fil (Core/CustomSpells.lua).
 function PlanSync.Push(dID, variant)
     if not dID or not variant then
         HR:Print("Open a dungeon and select a variant before syncing.")
@@ -69,7 +69,7 @@ function PlanSync.Push(dID, variant)
             :format((variant.syncFrom and shortName(variant.syncFrom.name)) or "another player"))
         return
     end
-    local data = HR.Share and HR.Share.EncodeVariant(dID, variant, { stripNoSync = true })
+    local data = HR.Share and HR.Share.EncodeVariant(dID, variant)       -- mode SYNC (defaut)
     if not data then
         HR:Print("Failed to encode the plan (C_EncodingUtil unavailable?).")
         return
@@ -231,7 +231,7 @@ function PlanSync.OnPlan(sender, body, msgId)
     -- Accept -> Apply), qui voit donc le payload deja filtre. `payload` est une table fraiche
     -- issue du decodage -- pas la DB -- la remplacer est sans risque.
     local dropped
-    payload.asg, dropped = HR.Share.StripNoSync(payload.asg)
+    payload.asg, dropped = HR.Share.IncomingAssignments(payload.asg, payload.healer)
     if dropped > 0 then HR:Debug("[sync] noSync stripped on receive:", dropped) end
 
     local dID = payload.dID
