@@ -15,9 +15,17 @@ local UI = HR.UI
 -- A EDITER a chaque version (+ bumper ## Version dans le .toc pour re-declencher).
 local SECTIONS = {
     {
-        title = "Fixes",
-        text  = "Show heal cooldowns now also hides Ramp and healer trinkets instead of "
-             .. "re-labelling them as personal cooldowns.",
+        title = "Custom spells",
+        text  = "Add your own spells from the new Spells section and plan them like any other cooldown.",
+    },
+    {
+        title = "Healthstone",
+        text  = "Now available as an external when a Warlock is in your group.",
+    },
+    {
+        title = "Web planner",
+        text  = "Import a plan from a Warcraft Logs report via https://ecplanner.vercel.app "
+             .. "(link in the Web planner button at the bottom of the main window).",
     },
 }
 

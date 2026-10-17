@@ -16,6 +16,7 @@ local SIDEBAR_W   = 64          -- largeur de la colonne de navigation a gauche
 local NAV_ICON    = 35          -- taille d'un bouton-image de navigation (-20%)
 local FOOTER_H    = 26          -- bandeau bas (version + bouton Join discord)
 local DISCORD_URL = "https://discord.com/invite/FBZFSb9emk"
+local WEB_URL     = "https://ecplanner.vercel.app"   -- planner web (bouton "Web planner" du bandeau bas)
 local NAV_GAP     = 8           -- espacement vertical entre boutons de nav
 local SIDE_PAD    = 10          -- marge haute de la sidebar
 
@@ -1874,16 +1875,17 @@ local function classLetter(letter, classToken)
     return letter
 end
 
--- Petit utilitaire de copie : modale avec le lien Discord dans un EditBox surligne (WoW ne peut
--- pas ecrire dans le presse-papier -> on affiche le texte selectionne, le joueur fait Ctrl+C).
+-- Petit utilitaire de copie : modale avec un LIEN dans un EditBox surligne (WoW ne peut pas
+-- ecrire dans le presse-papier -> on affiche le texte selectionne, le joueur fait Ctrl+C).
 -- L'EditBox est en lecture seule effective (toute edition re-remet l'URL + resurligne).
-function UI.ShowDiscordLink()
+-- UNE modale partagee (Discord, web planner) : titre et URL changent a chaque ouverture.
+function UI.ShowLink(title, url)
     if not (UI.Components and UI.Components.Window) then return end
-    local m = UI.discordModal
+    local m = UI.linkModal
     if not m then
-        m = UI.Components.Window(UIParent, { name = "ECPDiscordLink", title = "Join our Discord", width = 380, height = 150 })
+        m = UI.Components.Window(UIParent, { name = "ECPLinkModal", title = title, width = 380, height = 150 })
         m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
-        tinsert(UISpecialFrames, "ECPDiscordLink")
+        tinsert(UISpecialFrames, "ECPLinkModal")
         local c = m.content
         local lbl = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         lbl:SetPoint("TOPLEFT", 16, -16); lbl:SetPoint("RIGHT", c, "RIGHT", -16, 0); lbl:SetJustifyH("LEFT")
@@ -1894,10 +1896,8 @@ function UI.ShowDiscordLink()
         eb:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 6, -18)
         eb:SetAutoFocus(false)
         eb:SetFontObject("GameFontHighlight")
-        eb:SetText(DISCORD_URL)
-        eb:SetCursorPosition(0)
         eb:SetScript("OnTextChanged", function(self)
-            if self:GetText() ~= DISCORD_URL then self:SetText(DISCORD_URL); self:HighlightText() end
+            if self:GetText() ~= (m._url or "") then self:SetText(m._url or ""); self:HighlightText() end
         end)
         eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         eb:SetScript("OnEnterPressed",  function(self) self:ClearFocus() end)
@@ -1906,12 +1906,18 @@ function UI.ShowDiscordLink()
 
         local close = UI.Components.TextButton(c, { text = "Close", width = 90, onClick = function() m:Hide() end })
         close:SetPoint("BOTTOM", 0, 14)
-        UI.discordModal = m
+        UI.linkModal = m
     end
-    m.edit:SetText(DISCORD_URL)
+    if m.SetTitle then m:SetTitle(title) end
+    m._url = url
+    m.edit:SetText(url)
+    m.edit:SetCursorPosition(0)
     m:Show(); m:Raise()
     m.edit:SetFocus(); m.edit:HighlightText()
 end
+
+function UI.ShowDiscordLink() UI.ShowLink("Join our Discord", DISCORD_URL) end
+function UI.ShowWebPlannerLink() UI.ShowLink("ECP Web Planner", WEB_URL) end
 
 -- Modale GENERIQUE de copie (texte multi-lignes, defilant, lecture seule). Meme astuce que
 -- ShowDiscordLink : toute edition remet le texte stocke (WoW ne peut pas ecrire le presse-papier
@@ -1987,7 +1993,7 @@ local function Build()
     UI.rightPanel:SetPoint("TOPLEFT", UI.sidebar, "TOPRIGHT", 0, 0)
     UI.rightPanel:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", 0, FOOTER_H)   -- au-dessus du bandeau bas
 
-    -- Bandeau bas : "ECP - {version}" a gauche + bouton "Join discord" a droite.
+    -- Bandeau bas : "ECP - {version}" a gauche + boutons "Web planner" et "Join discord" a droite.
     local footer = CreateFrame("Frame", nil, content)
     footer:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", 0, 0)
     footer:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", 0, 0)
@@ -2001,6 +2007,9 @@ local function Build()
     local discBtn = UI.Components.TextButton(footer, { text = "Join discord", width = 120, height = 20,
         onClick = function() UI.ShowDiscordLink() end })
     discBtn:SetPoint("RIGHT", -10, 0)
+    local webBtn = UI.Components.TextButton(footer, { text = "Web planner", width = 120, height = 20,
+        onClick = function() UI.ShowWebPlannerLink() end })
+    webBtn:SetPoint("RIGHT", discBtn, "LEFT", -8, 0)
 
     -- Tout le contenu (hors navigation) s'ancre dans le panneau de droite.
     local body = UI.rightPanel

@@ -2,7 +2,7 @@
 ## Title: EiikoCooldownPlannerDev - ECP
 ## Notes: Plan healer defensive cooldowns against boss abilities
 ## Author: Eiiko
-## Version: 1.2.1
+## Version: 1.3.0
 ## IconTexture: Interface\AddOns\EiikoCooldownPlannerDev\Media\icon
 ## SavedVariables: HealPlannerDB, ECPlannerDB, ECPDevLog, ECPDevScan
 ## SavedVariablesPerCharacter: HealPlannerCharDB
