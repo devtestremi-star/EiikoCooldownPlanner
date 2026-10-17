@@ -134,7 +134,10 @@ Core/
                          #   Set/Clear` (l'UI ne touche a aucune API de binding) ; `UPDATE_BINDINGS`
                          #   resynchronise la rangee des options. Charge APRES `Core/Events.lua`.
   CustomSpells.lua       # SORTS CUSTOM du joueur (bibliotheque `ECPlannerDB.customSpells`, cles
-                         #   `U:<n>`) : spellID + CD saisi + spe de heal. INJECTES dans
+                         #   `U:<n>`) : spellID + CD saisi + spe de heal. Un OBJET A UTILISER
+                         #   (trinket) s'ajoute par son itemID (mode « Item » de la modale,
+                         #   `CS.LookupItem`) : spellID = son effet « Use: » (seul a voyager sur
+                         #   le fil), `itemId` additif = icone/nom/tooltip d'objet. INJECTES dans
                          #   HR.defensives (`custom = true`, class/role HEALER/spec tires du profil)
                          #   -> tout l'addon les lit sans le savoir. Par variante :
                          #   `v.customOff` = sorts DESACTIVES (opt-out). Archiver (jamais supprimer) :

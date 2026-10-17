@@ -1196,8 +1196,9 @@ local function BuildNewVariantModal()
     -- Largeur 680 : la rangee de talents aligne CHAQUE variante (32 px + 8, 14 entre sorts) ;
     -- Holy Paladin en compte 14 (AW x3, AC x3, Aura/Toll/Prism x2, Beacon, trinket Vessel)
     -- = 636 px depuis x0=16 -> bord droit a 652. Debordait a 560, mordait encore a 600/640.
+    -- Elargie a 780 (2026-10-17) : la rangee « Custom spells » s'ajoute aux talents et aux externals.
     local m = UI.Components.Window(UIParent, {
-        name = "ECPNewVariantModal", title = "New variant", width = 680, height = 574,
+        name = "ECPNewVariantModal", title = "New variant", width = 780, height = 574,
         bgTexture = (HR.Assets.registry["bg-variant"]) and HR.Asset("bg-variant") or nil,
     })
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)

@@ -21,7 +21,10 @@
 --
 -- STOCKAGE (additif, aucun bump de schema) : `ECPlannerDB.customSpells = { nextId, entries =
 -- { ["U:<n>"] = { spellID, name, icon, cooldown, [charges], profile, [archived], [shared],
--- createdAt } } }`.
+-- [itemId], createdAt } } }`.
+-- OBJET A UTILISER (trinket...) : ajoute par son ID d'OBJET (CS.LookupItem). `spellID` = le sort
+-- de son effet « Use: » (c'est lui qui voyage dans les tokens de fil : rien ne change sur le fil),
+-- `itemId` = l'objet, pour l'icone/le nom/le tooltip. Champ additif.
 -- Au COMPTE et hors profil d'affichage, comme les plans.
 --
 -- PAR VARIANTE : `v.customOff = { ["U:<n>"] = true }` liste les sorts DESACTIVES (opt-out). Un
@@ -93,6 +96,7 @@ local function inject(key, e)
         cooldown = tonumber(e.cooldown) or CS.MIN_COOLDOWN,
         charges  = (tonumber(e.charges) or 1) > 1 and tonumber(e.charges) or nil,
         spellID  = e.spellID,
+        itemId   = e.itemId,          -- objet a utiliser : tooltip d'OBJET (SetItemByID) partout
         icon     = e.icon,
         class    = prof and prof.class or nil,
         role     = "HEALER",
@@ -206,6 +210,7 @@ function CS.Create(data)
     s.nextId = s.nextId + 1
     s.entries[key] = {
         spellID   = sid,
+        itemId    = (tonumber(data.itemId) or 0) > 0 and tonumber(data.itemId) or nil,
         name      = type(data.name) == "string" and data.name or nil,
         icon      = data.icon,
         cooldown  = cd,
@@ -557,6 +562,40 @@ function CS.LookupSpell(spellID, cb)
         end
     end
     cb(nil)
+end
+
+-- Infos d'un OBJET A UTILISER (trinket...) par son itemID : son effet « Use: » devient le sort.
+-- Asynchrone comme LookupSpell. cb(info) ; cb(nil, "nouse") si l'objet existe mais n'a pas
+-- d'effet a utiliser ; cb(nil) s'il n'existe pas. info = celle de LookupSpell + `itemId`, avec
+-- le NOM et l'ICONE de l'objet (le sort « Use: » porte souvent un nom generique).
+function CS.LookupItem(itemID, cb)
+    itemID = tonumber(itemID)
+    if not itemID or itemID <= 0 or itemID ~= math.floor(itemID) then cb(nil); return end
+    if C_Item and C_Item.DoesItemExistByID and not safe(C_Item.DoesItemExistByID, itemID) then
+        cb(nil); return
+    end
+    local function finish()
+        local _, useSid = safe(C_Item and C_Item.GetItemSpell, itemID)
+        if not useSid then cb(nil, "nouse"); return end
+        CS.LookupSpell(useSid, function(info)
+            if not info then cb(nil, "nouse"); return end
+            info.itemId = itemID
+            local name = safe(C_Item.GetItemNameByID, itemID)
+            local icon = safe(C_Item.GetItemIconByID, itemID)
+            if name then info.name = name end
+            if icon then info.icon = icon end
+            info.passive, info.known = false, true   -- un objet ne se « connait » pas
+            cb(info)
+        end)
+    end
+    if Item and Item.CreateFromItemID then
+        local it = Item:CreateFromItemID(itemID)
+        if it and it.ContinueOnItemLoad and not it:IsItemEmpty() then
+            it:ContinueOnItemLoad(finish)
+            return
+        end
+    end
+    finish()
 end
 
 -- Sorts NATIFS d'une spe qui partagent ce spellID (pour avertir d'un doublon). { name, cooldown }.

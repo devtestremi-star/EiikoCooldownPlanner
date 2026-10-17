@@ -288,7 +288,7 @@ local function RenderCustom(sec, profile)
         local used = CS().UsageCount(key)
         r.sub:SetPoint("RIGHT", r, "RIGHT", textRight, 0) -- borne : sinon passe sous le CD/boutons
         r.sub:SetWordWrap(false)
-        r.sub:SetText(("#%d  -  %s  -  %s"):format(e.spellID or 0,
+        r.sub:SetText(("%s  -  %s  -  %s"):format(e.itemId and ("item #" .. e.itemId) or ("#" .. (e.spellID or 0)),
             e.shared and "|cff33dd66shared|r" or "private",
             used == 0 and "unused" or ("in %d plan%s"):format(used, used > 1 and "s" or "")))
         r.cd:ClearAllPoints(); r.cd:SetPoint("RIGHT", dev and r.del or r.edit, "LEFT", -12, 0)
@@ -393,7 +393,9 @@ local function BuildEditor()
     local C = UI.Components
     local m = C.Window(UIParent, {
         name = "ECPCustomSpellModal", title = "Add custom spell", width = ED_W, height = ED_H,
+        bgTexture = C.ModalBackgroundTexture(),
     })
+    C.ModalBackground(m)   -- cadrage "cover" + voile (meme fond que les modales de variante)
     m:SetFrameStrata("FULLSCREEN_DIALOG"); m:SetToplevel(true)
     m:SetFrameLevel(50)
     EscapeClosesOnlyMe(m)
@@ -405,8 +407,15 @@ local function BuildEditor()
         return fs
     end
 
-    -- 1. spellID
-    Label("Spell ID", -14)
+    -- 1. spellID (mode "spell") ou itemID (mode "item" : trinket et autre objet a utiliser,
+    -- resolu en son effet « Use: », cf. CS.LookupItem). Bascule masquee en edition.
+    m.idLabel = Label("Spell ID", -14)
+    m.modeItem = C.TextButton(c, { text = "Item", width = 60, height = 20,
+        onClick = function() UI.CustomSpellEditorSetMode("item") end })
+    m.modeItem:SetPoint("TOPRIGHT", -16, -10)
+    m.modeSpell = C.TextButton(c, { text = "Spell", width = 60, height = 20,
+        onClick = function() UI.CustomSpellEditorSetMode("spell") end })
+    m.modeSpell:SetPoint("RIGHT", m.modeItem, "LEFT", -6, 0)
     m.idBox = NumberBox(c, 120)
     m.idBox:SetPoint("TOPLEFT", 22, -34)
     m.idBox:SetMaxLetters(8)
@@ -427,7 +436,9 @@ local function BuildEditor()
     m.prevIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     m.prevIconBtn:SetScript("OnEnter", function(self)
         if not m.info then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetSpellByID(m.info.spellID); GameTooltip:Show()
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if m.info.itemId then GameTooltip:SetItemByID(m.info.itemId) else GameTooltip:SetSpellByID(m.info.spellID) end
+        GameTooltip:Show()
     end)
     m.prevIconBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     m.prevName = m.prev:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -547,17 +558,25 @@ function UI.CustomSpellEditorRefresh()
     local m = UI.customSpellModal; if not m then return end
     local info = m.info
 
+    local isItem = m.mode == "item"
+    m.modeSpell:SetSelected(not isItem); m.modeItem:SetSelected(isItem)
+    m.modeSpell:SetShown(not m.editKey); m.modeItem:SetShown(not m.editKey)
     if m.lookupState == "loading" then
         m.prevIcon:SetTexture(134400); m.prevName:SetText("Loading...")
         m.prevSub:SetText("")
     elseif not info then
         m.prevIcon:SetTexture(134400)
-        m.prevName:SetText(m.lookupState == "unknown" and "|cffff6060Unknown spell ID|r" or "|cff808080Enter a spell ID|r")
+        local txt
+        if m.lookupState == "nouse" then txt = "|cffff6060This item has no Use effect|r"
+        elseif m.lookupState == "unknown" then txt = isItem and "|cffff6060Unknown item ID|r" or "|cffff6060Unknown spell ID|r"
+        else txt = isItem and "|cff808080Enter an item ID|r" or "|cff808080Enter a spell ID|r" end
+        m.prevName:SetText(txt)
         m.prevSub:SetText("")
     else
         m.prevIcon:SetTexture(info.icon or 134400)
         m.prevName:SetText(info.name or "?")
-        m.prevSub:SetText(("Spell %d  -  base cooldown: %s"):format(info.spellID,
+        m.prevSub:SetText(("%s %d  -  base cooldown: %s"):format(info.itemId and "Item" or "Spell",
+            info.itemId or info.spellID,
             (info.baseCooldown or 0) > 0 and fmtCD(info.baseCooldown) or "unknown"))
     end
 
@@ -617,10 +636,11 @@ function UI.CustomSpellEditorLookup()
     if not id then m.lookupState = nil; UI.CustomSpellEditorRefresh(); return end
     m.lookupState = "loading"
     UI.CustomSpellEditorRefresh()
-    HR.CustomSpells.LookupSpell(id, function(info)
+    local lookup = (m.mode == "item") and HR.CustomSpells.LookupItem or HR.CustomSpells.LookupSpell
+    lookup(id, function(info, why)
         if m.seq ~= seq or not m:IsShown() then return end
         m.info = info
-        m.lookupState = info and "ok" or "unknown"
+        m.lookupState = info and "ok" or (why == "nouse" and "nouse" or "unknown")
         -- Prerempli le CD (et les charges) a la PREMIERE resolution, jamais par-dessus une saisie.
         if info and not m.editKey and not m.cdTouched then
             if (info.baseCooldown or 0) > 0 then m.cdBox:SetText(tostring(info.baseCooldown)) end
@@ -628,6 +648,19 @@ function UI.CustomSpellEditorLookup()
         end
         UI.CustomSpellEditorRefresh()
     end)
+end
+
+-- Bascule Spell ID / Item ID (ajout seulement). Relance la lecture de l'ID deja saisi.
+local ID_HINT = {
+    spell = "Find it on Wowhead (the number in the spell URL).",
+    item  = "Trinkets and other usable items: the number in the Wowhead item URL.",
+}
+function UI.CustomSpellEditorSetMode(mode)
+    local m = UI.customSpellModal; if not m or m.editKey then return end
+    m.mode = (mode == "item") and "item" or "spell"
+    m.idLabel:SetText(m.mode == "item" and "Item ID" or "Spell ID")
+    m.idHint:SetText(ID_HINT[m.mode])
+    UI.CustomSpellEditorLookup()
 end
 
 -- opts = { key = <cle custom a editer> | nil, profile = <cle de profil>, lockProfile = bool,
@@ -646,13 +679,15 @@ function UI.OpenCustomSpellEditor(opts)
         if not e then return end
         m:SetTitle("Edit custom spell")
         m.profile = e.profile
-        m.idBox:SetText(tostring(e.spellID)); m.idBox:Disable()
-        m.idHint:SetText("To use another spell, add a new one.")
+        m.mode = e.itemId and "item" or "spell"
+        m.idLabel:SetText(e.itemId and "Item ID" or "Spell ID")
+        m.idBox:SetText(tostring(e.itemId or e.spellID)); m.idBox:Disable()
+        m.idHint:SetText(e.itemId and "To use another item, add a new one." or "To use another spell, add a new one.")
         m.cdBox:SetText(tostring(e.cooldown)); m.chBox:SetText(tostring(e.charges or 1))
         m.shareChk:SetChecked(e.shared and true or false)
         -- Apercu depuis la bibliotheque (fonctionne meme si le client n'a pas le sort en cache),
         -- puis lecture du client pour la duree de base et les avertissements.
-        m.info = { spellID = e.spellID, name = e.name, icon = e.icon, baseCooldown = 0, charges = 1, known = true }
+        m.info = { spellID = e.spellID, itemId = e.itemId, name = e.name, icon = e.icon, baseCooldown = 0, charges = 1, known = true }
         m.lookupState = "ok"
         local used = HR.CustomSpells.UsageCount(m.editKey)
         if used > 0 then
@@ -661,7 +696,8 @@ function UI.OpenCustomSpellEditor(opts)
                 :format(used, used > 1 and "s" or "")
         end
         local key = m.editKey
-        HR.CustomSpells.LookupSpell(e.spellID, function(info)
+        local lookup = e.itemId and HR.CustomSpells.LookupItem or HR.CustomSpells.LookupSpell
+        lookup(e.itemId or e.spellID, function(info)
             if m.editKey ~= key or not m:IsShown() or not info then return end
             m.info = info
             UI.CustomSpellEditorRefresh()
@@ -678,8 +714,10 @@ function UI.OpenCustomSpellEditor(opts)
             m.specLocked = true
             m.specLockReason = "Spec of the variant you are editing."
         end
+        m.mode = "spell"
+        m.idLabel:SetText("Spell ID")
         m.idBox:Enable(); m.idBox:SetText("")
-        m.idHint:SetText("Find it on Wowhead (the number in the spell URL).")
+        m.idHint:SetText(ID_HINT.spell)
         m.cdBox:SetText(""); m.chBox:SetText("1")
         m.shareChk:SetChecked(false)          -- non partage par defaut : le joueur choisit
     end
@@ -706,6 +744,7 @@ function UI.SubmitCustomSpell()
     else
         if not m.info then return end
         data.spellID, data.name, data.icon = m.info.spellID, m.info.name, m.info.icon
+        data.itemId = m.info.itemId
         key, why = cs.Create(data)
     end
     if not key then HR:Print(("Could not save the spell (%s)."):format(why or "?")); return end
