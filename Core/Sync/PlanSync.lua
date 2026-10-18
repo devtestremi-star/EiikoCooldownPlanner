@@ -189,6 +189,8 @@ local function overwrite(v, dID, payload, sender)
     v.assignments = v.assignments or {}
     wipe(v.assignments)
     for encID, occs in pairs(asg) do v.assignments[encID] = occs end
+    v.phaseLengths = HR.Share.SanitizePhaseLengths(dID, payload.phl)   -- longueurs de phase de l'emetteur
+    v.bossOff      = HR.Share.SanitizeBossOff(dID, payload.boff)       -- boss desactives de l'emetteur
 
     -- Choix de variante de timeline JOUEE de l'emetteur (par boss), comme a l'import.
     if type(payload.tlv) == "table" and HR.SetActiveTimelineVariant then

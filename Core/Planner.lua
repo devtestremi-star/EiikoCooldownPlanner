@@ -122,12 +122,55 @@ local function GenerateFromPhases(boss, fightLength)
     return list
 end
 
+-- Representation A LONGUEUR VARIABLE (`boss.phaseSegments`, phases en % de vie) : les segments
+-- s'enchainent, chacun deroule le cycle de ses sorts (`firstAt` relatif au debut du segment)
+-- tant qu'il reste dans sa longueur. Longueur = `boss._segLengths[k]` sinon `seg.length` ; le
+-- dernier segment sans longueur court jusqu'a `fightLength`. Numerotation PAR SEGMENT, prefixe
+-- "P<k>" : allonger la phase 1 ajoute des occurrences a la phase 1 sans renumeroter la suivante.
+local function GenerateFromSegments(boss, fightLength)
+    local segs = boss.phaseSegments
+    local lengths = boss._segLengths or {}
+    local tl = boss._tlVariant and (tostring(boss._tlVariant) .. "|") or ""
+    local list, start = {}, 0
+    for k, seg in ipairs(segs) do
+        if start > fightLength and not boss._segAllKeys then break end
+        local len = tonumber(lengths[k]) or seg.length
+        if k == #segs or not len then len = fightLength - start end
+        if boss._segAllKeys then len = fightLength end    -- validation : toutes les cles possibles
+        local sub = {}
+        for _, ab in ipairs(seg.abilities or {}) do
+            if ab.firstAt ~= nil then
+                local rel = ab.firstAt
+                while rel < len and (boss._segAllKeys or start + rel <= fightLength) do
+                    sub[#sub + 1] = { time = start + rel, spellID = ab.spellID, name = ab.name,
+                        aoe = ab.aoe, cast = ab.cast, defMarker = ab.defMarker,
+                        overridenName = ab.customName or ab.overridenName,
+                        allowInTimeline = ab.allowInTimeline, phase = k, phaseName = seg.name }
+                    if not ab.period or ab.period <= 0 then break end
+                    rel = rel + ab.period
+                end
+            end
+        end
+        table.sort(sub, function(a, b)
+            if a.time == b.time then return tostring(a.spellID) < tostring(b.spellID) end
+            return a.time < b.time
+        end)
+        NumberOccurrences(sub, tl .. "P" .. k)
+        for _, o in ipairs(sub) do list[#list + 1] = o end
+        start = start + len
+    end
+    return list
+end
+
 -- Genere la liste chronologique des occurrences sur `fightLength` secondes.
--- Dispatche selon la representation du boss : `phases` (riche) sinon `abilities`.
+-- Dispatche selon la representation du boss : `phaseSegments`, puis `phases` (riche),
+-- sinon `abilities`.
 function HR.GenerateOccurrences(boss, fightLength)
     fightLength = fightLength or HR.FIGHT_LENGTH
     local list
-    if boss and boss.phases then
+    if boss and boss.phaseSegments then
+        list = GenerateFromSegments(boss, fightLength)
+    elseif boss and boss.phases then
         list = GenerateFromPhases(boss, fightLength)
     else
         list = GenerateFromAbilities(boss, fightLength)

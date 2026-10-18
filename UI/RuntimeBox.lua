@@ -1120,7 +1120,7 @@ local function DevDumpTimeline(tag, boss, raw, used)
     if not HR.DevLogEnabled() then return end
     HR.DevLog("start", "%s boss=%s id=%s rep=%s raw=%d used=%d", tag,
         HR.DevSafe(boss and boss.name), HR.DevSafe(boss and boss.id),
-        (boss and boss.phases) and "phases" or "abilities",
+        (boss and boss.phaseSegments) and "segments" or (boss and boss.phases) and "phases" or "abilities",
         raw and #raw or -1, used and #used or -1)
     if boss and boss.durationGroups then
         for dur, ids in pairs(boss.durationGroups) do
@@ -1160,6 +1160,14 @@ function HR.Runtime.StartLive(encounterID)
     -- des defensifs que le joueur n'a pas (cf. l'en-tete de HR.GetV2Used, qui l'interdit).
     -- Le repli "1re variante" existe ailleurs, pour l'AFFICHAGE editable seul (GetActiveVariant).
     local variant = dungeon and HR.GetV2Used(dungeon.id)
+    boss = HR.WithPhaseLengths(boss, variant)   -- longueurs de phase reglees dans le plan joue
+    -- Boss DESACTIVE dans le plan joue (v.bossOff) : on joue comme SANS plan -> aucune annonce,
+    -- mais la reconnaissance, la Timeline et les Progress bars tournent normalement.
+    if HR.IsBossOffInVariant(variant, encounterID) then
+        HR.DevLog("start", "boss %s disabled in played variant -> no calls", tostring(encounterID))
+        if HR.debug then HR:Debug("[rt] boss disabled in this plan: no calls") end
+        variant = nil
+    end
     local rawOccs = passthrough and {} or HR.GenerateOccurrences(boss, HR.FIGHT_LENGTH)
     local planned = passthrough and {} or HR.FilterTimeline(rawOccs)
     DevDumpTimeline("StartLive", boss, rawOccs, planned)
@@ -1187,7 +1195,8 @@ end
 function HR.Runtime.StartTest(encounterID, variant)
     local boss = HR.GetBossByEncounterID(encounterID)
     if not boss then return false end
-    boss = HR.ResolveBossTimeline(boss)   -- timeline de la variante active (no-op si aucune)
+    boss = HR.WithPhaseLengths(HR.ResolveBossTimeline(boss), variant)   -- timeline + longueurs de phase du plan
+    if HR.IsBossOffInVariant(variant, encounterID) then variant = nil end   -- boss desactive : comme sans plan
     local raw = HR.GenerateOccurrences(boss, HR.FIGHT_LENGTH)
     local timeline = HR.FilterTimeline(raw)
     if #timeline == 0 then return false end
@@ -1358,6 +1367,19 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_ADDED", function(_, eventInfo)
         return
     end
 
+    -- (4b) Declencheur de phase par SORT RECONNU (boss.phaseTriggers, ex. Lightwarden Ruia) : sens
+    -- unique, `from` optionnel (seulement depuis cette phase). Avant le lien au plan, pour que ce
+    -- sort-la se relie deja a la nouvelle phase. Aucun recalage des temps (decision 2026-10-17).
+    for _, trg in ipairs(s.boss and s.boss.phaseTriggers or {}) do
+        if trg.spellID == recId and trg.to > s.currentPhase
+           and (trg.from == nil or trg.from == s.currentPhase) then
+            s.currentPhase = trg.to
+            HR.DevLog("ADDED", "  phase -> %d (trigger %s)", trg.to, tostring(recId))
+            if HR.debug then HR:Debug(("[rt] phase -> %d (%s)"):format(trg.to, HR.DevSafe(recName))) end
+            break
+        end
+    end
+
     -- (5) Sort trouve : autorise ? (Activer / DB, resolu sur l'id du PLAN s'il existe). Sinon ignore.
     local planId = HR.PlanIdFor(s.boss, recName)
     local sid    = planId or recId
@@ -1380,8 +1402,11 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_ADDED", function(_, eventInfo)
     if not planId or planOk == false then return end
     local fireRel = (GetTime() - s.pullTime) + rem
     local occ, bestDiff
+    -- Phases a longueur variable : on ne relie qu'aux occurrences de la phase COURANTE (un
+    -- Lightfire de P3 ne doit pas reprendre les defensifs d'un Lightfire de P1).
+    local scoped = s.boss and s.boss.phaseSegments ~= nil
     for _, o in ipairs(s.planned) do
-        if o.spellID == planId then
+        if o.spellID == planId and (not scoped or o.phase == s.currentPhase) then
             local d = math.abs(o.time - fireRel)
             if not bestDiff or d < bestDiff then occ, bestDiff = o, d end
         end

@@ -200,7 +200,7 @@ function UI.ShowCatalogPreview(entry, creator)
         if asg and next(asg) then
             -- Occurrences du boss, dans l'ordre du temps. On ne garde que celles que le
             -- plan touche : c'est ce qui rend la frise CONDENSEE.
-            local occs = HR.GenerateOccurrences(HR.ResolveBossTimeline(boss), HR.FIGHT_LENGTH) or {}
+            local occs = HR.GenerateOccurrences(HR.WithPhaseLengths(HR.ResolveBossTimeline(boss), entry), HR.FIGHT_LENGTH) or {}
             local planned = {}
             for _, o in ipairs(occs) do
                 local list = asg[o.key]

@@ -21,6 +21,8 @@ local MARKER_MIN_GAP = ICON + 8 -- ecart horizontal MINIMUM entre 2 marqueurs (a
 local OFF_SHIFT  = 8            -- decalage visuel FIXE (px) gauche/droite selon le signe de
                                 -- l'offset (indication de sens, NON proportionnel a la valeur)
 
+local PhaseLengthSource, RenderPhaseHandles   -- phases a longueur variable (cf. plus bas)
+
 -- Picker custom des CD (remplace le menu WoW natif). Look de l'addon.
 local WHITE8X8       = "Interface\\Buttons\\WHITE8x8"
 local CDP_W          = 340      -- largeur (assez large pour ne jamais chevaucher temps + Force)
@@ -136,6 +138,147 @@ local function CreateMarker(f)
     return mk
 end
 
+--------------------------------------------------------------------------------
+-- Phases a LONGUEUR VARIABLE (boss a `phaseSegments`) : une POIGNEE par frontiere de
+-- phase, a faire glisser sur la frise. Allonger une phase prolonge son cycle ; les phases
+-- suivantes se decalent. Le reglage est ecrit dans la variante au RELACHEMENT
+-- (HR.V2_SetPhaseLength) ; pendant le drag, `UI.phaseDrag` surcharge la longueur pour un
+-- rendu en direct. Clic droit = longueur par defaut. Les placements ne sont jamais touches.
+--------------------------------------------------------------------------------
+
+local HANDLE_TOP = 62           -- haut de la poignee (px depuis le haut du cadre ; axe a LINE_Y)
+
+-- Source des longueurs pour le rendu : la variante, ou une copie surchargee par le drag.
+PhaseLengthSource = function(boss, variant)
+    local drag = UI.phaseDrag
+    if not (drag and drag.encID == boss.id and boss.phaseSegments) then return variant end
+    local own = variant and variant.phaseLengths and variant.phaseLengths[boss.id]
+    local merged = {}
+    for k, v in pairs(own or {}) do merged[k] = v end
+    merged[drag.k] = drag.sec
+    return { phaseLengths = { [boss.id] = merged } }
+end
+
+local function AcquirePhaseHandle(f, k)
+    f.phaseHandles = f.phaseHandles or {}
+    local h = f.phaseHandles[k]
+    if h then return h end
+    local ar, ag, ab = HR.Colors.Unpack("accent")
+
+    h = {}
+    -- Trait de demarcation gris (gris de l'addon), sous les marqueurs.
+    h.line = f:CreateTexture(nil, "ARTWORK", nil, -1)
+    h.line:SetColorTexture(HR.Colors.Unpack("bgDark"))
+    h.line:SetWidth(4)
+
+    -- Poignee : etiquette « move » au sommet de la ligne, fond gris de l'addon, bordure violette.
+    local PAD_X, PAD_Y = 8, 4
+    local g = CreateFrame("Button", nil, f)
+    g:SetFrameLevel(f:GetFrameLevel() + 20)
+    g.bg = g:CreateTexture(nil, "ARTWORK")
+    g.bg:SetAllPoints()
+    g.bg:SetColorTexture(HR.Colors.Unpack("bgDark"))
+    WhiteBorder(g, 1)
+    for _, t in pairs(g._eb) do t:SetColorTexture(ar, ag, ab, 1) end
+    g.label = g:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    g.label:SetPoint("CENTER", 0, 0)
+    g.label:SetFont(g.label:GetFont(), 11, "")
+    g.label:SetText("move")
+    g:SetSize(math.ceil(g.label:GetStringWidth()) + PAD_X * 2,
+              math.ceil(g.label:GetStringHeight()) + PAD_Y * 2)
+    -- Temps theorique de la frontiere, au-dessus de la poignee.
+    g.time = g:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    g.time:SetPoint("BOTTOM", g, "TOP", 0, 2)
+    h.grip = g
+
+    g:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(("%s -> %s"):format(self._from or "?", self._to or "?"))
+        if self._canEdit then
+            GameTooltip:AddLine("Drag to set how long this phase lasts.", 1, 1, 1, true)
+            GameTooltip:AddLine(("Right-click: default (%s)."):format(fmtTime(self._default or 0)), 0.7, 0.7, 0.7, true)
+        else
+            GameTooltip:AddLine(HR.EditBlockedText(self._why, self._var), 1, 1, 1, true)
+        end
+        GameTooltip:Show()
+    end)
+    g:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Fin du drag : ecrit la longueur dans la variante (ou re-rend si rien n'a change).
+    local function finishDrag(self)
+        self:SetScript("OnUpdate", nil)
+        local drag = UI.phaseDrag
+        UI.phaseDrag = nil
+        if drag and HR.V2_SetPhaseLength(drag.encID, drag.k, drag.sec) then
+            UI.RefreshRows()
+        elseif self._boss then
+            UI.RenderPlanTimeline(self._boss)
+        end
+    end
+
+    -- Drag : on suit le curseur (OnUpdate) tant que le bouton gauche est ENFONCE. Le
+    -- relachement est detecte ici (IsMouseButtonDown) et pas seulement par OnMouseUp, qui ne
+    -- part pas si le curseur a quitte la poignee.
+    g:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" or not self._canEdit then return end
+        UI.phaseDrag = { encID = self._boss.id, k = self._k, sec = self._len }
+        self:SetScript("OnUpdate", function(btn)
+            if not IsMouseButtonDown("LeftButton") then finishDrag(btn); return end
+            local fr = btn:GetParent()
+            local scale = fr:GetEffectiveScale()
+            local cx = GetCursorPosition() / scale
+            local axisW = fr:GetWidth() - PAD_L - PAD_R
+            if axisW <= 0 then return end
+            local t = (cx - fr:GetLeft() - PAD_L) / axisW * FIGHT
+            local sec = math.floor(t - btn._start + 0.5)
+            sec = math.max(HR.PHASE_MIN_LENGTH, math.min(FIGHT - btn._start, sec))
+            if UI.phaseDrag and sec ~= UI.phaseDrag.sec then
+                UI.phaseDrag.sec = sec
+                UI.RenderPlanTimeline(btn._boss)
+            end
+        end)
+    end)
+    g:SetScript("OnMouseUp", function(self, button)
+        if button == "RightButton" then
+            if self._canEdit and HR.V2_SetPhaseLength(self._boss.id, self._k, nil) then UI.RefreshRows() end
+        elseif UI.phaseDrag then
+            finishDrag(self)
+        end
+    end)
+
+    f.phaseHandles[k] = h
+    return h
+end
+
+RenderPhaseHandles = function(f, boss, lenSrc, canEdit, whyRO, curVar, xAt)
+    for _, h in pairs(f.phaseHandles or {}) do h.line:Hide(); h.grip:Hide() end
+    local segs = boss.phaseSegments
+    if not segs or #segs < 2 then return end
+    local start = 0
+    for k = 1, #segs - 1 do
+        local len = HR.GetPhaseLength(boss, lenSrc, k) or 0
+        local t = start + len
+        if t > FIGHT then break end
+        local h = AcquirePhaseHandle(f, k)
+        local x = xAt(t)
+        h.line:ClearAllPoints()
+        h.line:SetPoint("TOP", f, "TOPLEFT", x, -HANDLE_TOP)
+        h.line:SetPoint("BOTTOM", f, "BOTTOMLEFT", x, 4)
+        h.line:Show()
+        local g = h.grip
+        g:ClearAllPoints()
+        g:SetPoint("TOP", f, "TOPLEFT", x, -HANDLE_TOP)
+        g._boss, g._k, g._start, g._len = boss, k, start, len
+        g._from, g._to = segs[k].name, segs[k + 1].name
+        g._default = segs[k].length
+        g._canEdit, g._why, g._var = canEdit, whyRO, curVar
+        g.time:SetText(fmtTime(t))
+        g:SetAlpha(canEdit and 1 or 0.4)
+        g:Show()
+        start = t
+    end
+end
+
 -- Construit (une fois) le cadre de la frise, dans la zone du plan (sous la rangee
 -- de boss). Parente a UI.body comme les autres panneaux.
 local function BuildFrame()
@@ -170,6 +313,18 @@ local function BuildFrame()
     f.roBanner.text = f.roBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     f.roBanner.text:SetPoint("CENTER")
     f.roBanner:Hide()
+
+    -- Bandeau BOSS DESACTIVE dans ce plan (v.bossOff) : le plan reste editable, mais rien ne
+    -- sera annonce en combat. Meme style que le bandeau lecture seule, juste en dessous.
+    f.offBanner = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.offBanner:SetHeight(20)
+    f.offBanner:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+    f.offBanner:SetBackdropColor(HR.Colors.Unpack("infoBg"))
+    f.offBanner.text = f.offBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.offBanner.text:SetPoint("CENTER")
+    f.offBanner.text:SetText(HR.Colors.Hex("info")
+        .. "Boss disabled in this plan: no calls in combat (\"Enable boss\" to turn them back on)." .. "|r")
+    f.offBanner:Hide()
 
     -- Re-rendu si la taille change (1er layout = largeur 0 sinon).
     f:SetScript("OnSizeChanged", function(self)
@@ -220,9 +375,21 @@ function UI.RenderPlanTimeline(boss)
     else
         f.roBanner:Hide()
     end
+    if HR.IsBossOffInVariant(curVar, boss.id) then
+        local top = f.roBanner:IsShown() and -24 or -2
+        f.offBanner:ClearAllPoints()
+        f.offBanner:SetPoint("TOPLEFT", PAD_L, top)
+        f.offBanner:SetPoint("TOPRIGHT", -PAD_R, top)
+        f.offBanner:Show()
+    else
+        f.offBanner:Hide()
+    end
 
     -- Occurrences planifiables (variante de timeline visualisee = active par defaut).
-    local occ = HR.GenerateOccurrences(HR.ResolveBossTimeline(boss, UI.GetViewedTlVariant(boss)), HR.FIGHT_LENGTH)
+    -- Phases a longueur variable : longueurs de la variante, sauf celle en cours de drag.
+    local lenSrc = PhaseLengthSource(boss, curVar)
+    local occ = HR.GenerateOccurrences(HR.WithPhaseLengths(
+        HR.ResolveBossTimeline(boss, UI.GetViewedTlVariant(boss)), lenSrc), HR.FIGHT_LENGTH)
 
     for _, mk in ipairs(f.markers) do mk:Hide() end
 
@@ -320,6 +487,8 @@ function UI.RenderPlanTimeline(boss)
             prev, prevShift = b, shift
         end
     end
+
+    RenderPhaseHandles(f, boss, lenSrc, canEdit, whyRO, curVar, xAt)
 end
 
 --------------------------------------------------------------------------------
@@ -463,7 +632,8 @@ function UI.OpenPlanPicker(anchor, encounterID, occ)
     local boss = dungeon and dungeon.bosses[UI.selBoss]
     local timeOf = {}
     if boss then
-        for _, o in ipairs(HR.GenerateOccurrences(HR.ResolveBossTimeline(boss, UI.GetViewedTlVariant(boss)), HR.FIGHT_LENGTH)) do
+        for _, o in ipairs(HR.GenerateOccurrences(HR.WithPhaseLengths(
+                HR.ResolveBossTimeline(boss, UI.GetViewedTlVariant(boss)), cur), HR.FIGHT_LENGTH)) do
             timeOf[o.key] = HR.OccDefTime(o)   -- temps d'usage du CD (defMarker inclus) ; offset ajoute dans NewPlan_Uses
         end
     end

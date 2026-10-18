@@ -417,6 +417,19 @@ function HR.V2_CreateVariant(name, healer, externals, talentSpells, opts)
         customOff    = (opts.customOff and next(opts.customOff)) and HR.DeepCopy(opts.customOff) or nil,
         assignments  = assignments,
     }
+    -- Boss a timeline DYNAMIQUE (`phaseSegments`) : DESACTIVES par defaut dans une variante
+    -- CREEE (v.bossOff) -- leurs temps dependent des longueurs de phase, le joueur les active
+    -- quand il les a reglees. Import et Duplicate ne passent pas ici : ils gardent la source.
+    for _, d in ipairs(HR.content or {}) do
+        if d.id == currentDungeon then
+            for _, b in ipairs(d.bosses or {}) do
+                if b.phaseSegments then
+                    v.bossOff = v.bossOff or {}
+                    v.bossOff[b.id] = true
+                end
+            end
+        end
+    end
     -- Copie de template : un sort CUSTOM que CETTE variante desactive ne doit pas y arriver
     -- place. On filtre la COPIE (donnee neuve, jamais celle du template), et seulement les
     -- tokens custom -- le reste du plan copie est inchange.
@@ -577,6 +590,8 @@ function HR.V2_DuplicateVariant(name)
         talentSpells = HR.DeepCopy(cur.talentSpells or {}),
         assignments  = HR.DeepCopy(cur.assignments or {}),
         customOff    = cur.customOff and HR.DeepCopy(cur.customOff) or nil,
+        phaseLengths = cur.phaseLengths and HR.DeepCopy(cur.phaseLengths) or nil,
+        bossOff      = cur.bossOff and HR.DeepCopy(cur.bossOff) or nil,
         -- PAS de `synced` ni de `syncFrom` : cf. l'avertissement ci-dessus.
     }
     -- La copie devient MODIFIABLE : les sorts custom recus qu'elle porte (plan Sync ou
@@ -664,6 +679,58 @@ function HR.NewPlan_Remove(encounterID, occKey, token)
     if list then
         for i, e in ipairs(list) do if e.token == token then table.remove(list, i); break end end
     end
+end
+
+-- Regle la longueur (s) de la phase k d'un boss a `phaseSegments`, dans la variante ACTIVE
+-- (champ additif `v.phaseLengths[encounterID][k]`). nil ou valeur par defaut = retire le
+-- reglage. Les placements ne sont JAMAIS touches : une occurrence sortie de la phase est
+-- seulement masquee, elle revient si on rallonge. Renvoie true si quelque chose a change.
+function HR.V2_SetPhaseLength(encounterID, k, seconds)
+    local v = HR.GetActiveVariant()
+    if not v or not HR.CanEditVariant(v) then return false end    -- verrou d'edition
+    local boss = HR.GetBossByEncounterID(encounterID)
+    local segs = boss and boss.phaseSegments
+    if not segs or type(k) ~= "number" or k < 1 or k >= #segs then return false end
+    seconds = tonumber(seconds)
+    if seconds then
+        seconds = math.floor(seconds + 0.5)
+        seconds = math.max(HR.PHASE_MIN_LENGTH, math.min(HR.FIGHT_LENGTH, seconds))
+        if seconds == segs[k].length then seconds = nil end
+    end
+    local cur = v.phaseLengths and v.phaseLengths[encounterID] and v.phaseLengths[encounterID][k]
+    if cur == seconds then return false end
+    if seconds then
+        v.phaseLengths = v.phaseLengths or {}
+        v.phaseLengths[encounterID] = v.phaseLengths[encounterID] or {}
+        v.phaseLengths[encounterID][k] = seconds
+    elseif v.phaseLengths and v.phaseLengths[encounterID] then
+        v.phaseLengths[encounterID][k] = nil
+        if not next(v.phaseLengths[encounterID]) then v.phaseLengths[encounterID] = nil end
+        if not next(v.phaseLengths) then v.phaseLengths = nil end
+    end
+    return true
+end
+
+-- Boss DESACTIVE dans une variante (champ additif `v.bossOff[encounterID] = true`) : en combat,
+-- aucune annonce pour ce boss, comme si son plan etait vide. Les placements restent intacts.
+function HR.IsBossOffInVariant(variant, encounterID)
+    return (variant and variant.bossOff and variant.bossOff[encounterID]) == true
+end
+
+-- Active/desactive un boss dans la variante ACTIVE. Renvoie true si quelque chose a change.
+function HR.V2_SetBossOff(encounterID, off)
+    local v = HR.GetActiveVariant()
+    if not v or not HR.CanEditVariant(v) then return false end    -- verrou d'edition
+    off = off and true or nil
+    if HR.IsBossOffInVariant(v, encounterID) == (off == true) then return false end
+    if off then
+        v.bossOff = v.bossOff or {}
+        v.bossOff[encounterID] = true
+    elseif v.bossOff then
+        v.bossOff[encounterID] = nil
+        if not next(v.bossOff) then v.bossOff = nil end
+    end
+    return true
 end
 
 -- Remet a ZERO la planification d'UN boss pour la variante donnee : vide tous ses placements,

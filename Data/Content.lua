@@ -80,6 +80,23 @@
 --     Les deux champs sont OPTIONNELS : un boss sans `phase`/`phaseTransitions` est 100% legacy.
 --     Cf. Core/Matcher.lua (byDurPhase, PhaseTransitionFor) + UI/RuntimeBox.lua (s.currentPhase).
 --
+--   PHASES A LONGUEUR VARIABLE (`phaseSegments`, boss a phases en % de vie, ex. Lightwarden Ruia) :
+--     `phaseSegments = { { name, [length], abilities = { {spellID, name, firstAt, [period], ...} } }, ... }`
+--     Les segments s'ENCHAINENT : le segment k commence a la fin du k-1. `length` = longueur par
+--     defaut (s) ; absente sur le dernier = jusqu'a la fin du combat. Dans un segment, chaque sort
+--     suit son cycle (`firstAt` RELATIF au debut du segment + j*period) tant qu'il reste dans la
+--     longueur : allonger une phase prolonge son cycle normal. Cles d'occurrence PAR SEGMENT
+--     (`P<k>|spellID:N`) : changer la longueur d'une phase ne renumerote JAMAIS une autre phase.
+--     Longueurs reelles : `boss._segLengths[k]` (pose par le resolveur), sinon `length`.
+--     Prioritaire sur `phases`/`abilities` (Core/Planner.lua, GenerateFromSegments).
+--     `phaseDurationGroups = { [phase] = { { dur, [tol], cycle = {spellID,...} } } }` (cle boss) :
+--     relances qui partagent une duree, mais pas les memes sorts selon la phase -> cycle scope a
+--     la phase courante, compteur repartant a 1 a l'entree de la phase (Core/Matcher.lua).
+--     `phaseTriggers = { { spellID, to, [from] }, ... }` (cle boss) : en combat, quand un sort est
+--     RECONNU (matching par duree) et qu'il est un declencheur, la phase courante passe a `to`
+--     (sens unique, `to` > phase courante ; `from` = seulement depuis cette phase). Les defensifs
+--     ne se relient alors qu'aux occurrences de la phase courante. AUCUN recalage des temps.
+--
 -- encounterID des boss = ID reel de l'event ENCOUNTER_START (renseigne).
 -- zoneID = instanceID de GetInstanceInfo : encore PLACEHOLDER (0) pour certains.
 -- ICONES : `icon` = fileID explicite (prioritaire) ; sinon `iconSpellID` = sort de
@@ -1002,15 +1019,50 @@ local content_1210 = {
                     { spellID = 1272290, name = "Crunched" },
                 },
             },
-            { id = 3201, name = "Lightwarden Ruia", enable = false, -- combat a phases en % (non modelable en timeline temps) -> mode brut runtime
-                abilities = { -- private-auras, durees a confirmer via /hp gather
-                    { spellID = 1239825, name = "Lightfire" },
-                    { spellID = 1239919, name = "Lightfire Beams" },
-                    { spellID = 1241058, name = "Grievous Thrash" },
-                    { spellID = 1251345, name = "Blight Resin" },
-                    { spellID = 1257094, name = "Pulverized" },
-                },
-            },
+            { id = 3201, name = "Lightwarden Ruia",
+              -- Declencheurs de phase EN COMBAT (sorts reconnus) : P2 = 1er Grievous Thrash ; P3 = un
+              -- Lightfire vu EN P2 (en P1 il appartient a la P1). Cf. `phaseTriggers` (en-tete).
+              phaseTriggers = {
+                  { spellID = 1241058, to = 2 },             -- Grievous Thrash
+                  { spellID = 1239824, from = 2, to = 3 },   -- Lightfire, seulement depuis la P2
+              },
+              -- Reconnaissance en combat (duree d'annonce serveur). 1re annonce de chaque sort = duree
+              -- propre ; les relances partagent une duree, departagee par un cycle PAR phase.
+              abilities = {
+                  { spellID = 1239824, name = "Lightfire",           durations = { 5, 7.3 } },
+                  { spellID = 1241058, name = "Grievous Thrash",     durations = { 3, 15.3 } },
+                  { spellID = 1240210, name = "Pulverizing Strikes", durations = { 9, 31.3 } },
+                  { spellID = 1240100, name = "Lightfall",           durations = { 18, 23.3 }, allowInTimeline = false },
+              },
+              phaseDurationGroups = {
+                  [1] = { { dur = 20, tol = 1, cycle = { 1239824, 1240100 } } },                   -- Lightfire, Lightfall
+                  [2] = { { dur = 20, tol = 1, cycle = { 1241058, 1240210 } } },                   -- Thrash, Pulverizing
+                  [3] = { { dur = 32, cycle = { 1239824, 1241058, 1240100, 1240210 } } },          -- Lightfire, Thrash, Lightfall, Pulverizing
+              },
+              phaseSegments = {
+                -- 3 phases en % de vie (formes Moonkin -> Bear -> Haranir) : `phaseSegments`, longueur
+                -- ajustable par le joueur (slider). 2 logs WCL ; longueurs par defaut = 2e log.
+                -- Warden's Wrath (Moonkin, 9/34/68 puis 13/34/68 : irregulier) volontairement IGNORE.
+                -- Pulverizing Strikes : seul le 1er des 2 ids (1240210) est garde (le 2e suit a +2 s).
+                -- Bear : cycle 20 s (choix utilisateur ; les logs donnent 21).
+                -- Lightfall (P1/P3) et Spirits of the Vale (P3) RETIRES de la timeline (choix utilisateur).
+                -- Shapeshift: Moonkin/Bear/Haranir (1239882/1239885/1239883) RETIRES : non detectables en
+                -- jeu. Les phases restent bornees par leur longueur (slider), pas par ces sorts.
+                -- Ancien contenu (enable = false, ids de private-auras sans timing) : 1239825 Lightfire,
+                -- 1239919 Lightfire Beams, 1241058 Grievous Thrash, 1251345 Blight Resin, 1257094 Pulverized.
+                { name = "Moonkin", length = 76, abilities = {
+                    { spellID = 1239824, name = "Lightfire",           firstAt = 8,  period = 21 },
+                } },
+                { name = "Bear", length = 69, abilities = {
+                    { spellID = 1241058, name = "Grievous Thrash",     firstAt = 3,  period = 20 },
+                    { spellID = 1240210, name = "Pulverizing Strikes", firstAt = 10, period = 20 },
+                } },
+                { name = "Haranir", abilities = {   -- derniere phase : jusqu'a la mort du boss
+                    { spellID = 1239824, name = "Lightfire",           firstAt = 7,  period = 32 },
+                    { spellID = 1241058, name = "Grievous Thrash",     firstAt = 15, period = 32 },
+                    { spellID = 1240210, name = "Pulverizing Strikes", firstAt = 32, period = 32 },
+                } },
+            } },
             { id = 3202, name = "Ziekket", phases = {
                 -- Timeline devscan (M+, 12.1) : cycle de 50 s (confirme sur 6 occurrences).
                 -- Ouvertures relevees : Awaken 4, Lightbloom's Essence 14, Thornspike 26,
@@ -1331,6 +1383,44 @@ function HR.ResolveBossTimeline(boss, overrideVariantId)
     copy.abilities     = active.abilities or boss.abilities  -- garde le duration-only du boss
     copy._tlVariant    = active.id
     copy.timelineVariants = nil                              -- evite toute reentrance
+    return copy
+end
+
+--------------------------------------------------------------------------------
+-- Phases a LONGUEUR VARIABLE (`phaseSegments`). La longueur de chaque phase fait partie
+-- du PLAN : elle vit dans la variante (`v.phaseLengths[encounterID][k]`, cle additive,
+-- absente = longueurs par defaut du contenu) et voyage avec elle (Sync / Export).
+--------------------------------------------------------------------------------
+
+HR.PHASE_MIN_LENGTH = 10   -- (s) plancher d'une phase reglee par le joueur
+
+-- Longueur EFFECTIVE (s) de la phase k du boss pour la variante, ou nil pour la derniere
+-- (ouverte jusqu'a la fin du combat).
+function HR.GetPhaseLength(boss, variant, k)
+    local segs = boss and boss.phaseSegments
+    if not segs or k >= #segs then return nil end
+    local own = variant and variant.phaseLengths and variant.phaseLengths[boss.id]
+    return tonumber(own and own[k]) or segs[k].length
+end
+
+-- Copie du boss portant les longueurs de phase de la variante (lues par le planner).
+-- Sans `phaseSegments` : le boss tel quel. A appeler APRES HR.ResolveBossTimeline.
+function HR.WithPhaseLengths(boss, variant)
+    if not (boss and boss.phaseSegments) then return boss end
+    local copy = {}
+    for k, v in pairs(boss) do copy[k] = v end
+    copy._segLengths = variant and variant.phaseLengths and variant.phaseLengths[boss.id] or nil
+    return copy
+end
+
+-- Copie du boss qui genere TOUTES les cles possibles (chaque phase deroulee sur tout le
+-- combat). Pour la VALIDATION d'un import : une occurrence masquee par une phase raccourcie
+-- reste une cle legitime, la refuser perdrait des placements.
+function HR.WithAllPhaseKeys(boss)
+    if not (boss and boss.phaseSegments) then return boss end
+    local copy = {}
+    for k, v in pairs(boss) do copy[k] = v end
+    copy._segAllKeys = true
     return copy
 end
 

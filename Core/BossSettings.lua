@@ -174,6 +174,9 @@ function HR.GetBossSpells(boss)
         for _, p in ipairs(boss.phases or {}) do
             for _, ev in ipairs(p.events or {}) do add(ev) end
         end
+        for _, seg in ipairs(boss.phaseSegments or {}) do
+            for _, ab in ipairs(seg.abilities or {}) do add(ab) end
+        end
     end
     return list
 end

@@ -28,6 +28,8 @@ Colors.registry = {
     ["force"]           = { 1, 0.5, 0, 1 },      -- bordure "force"
     ["forceBg"]         = { 0.9, 0.5, 0.1, 0.85 },
     ["forceHover"]      = { 1, 0.6, 0.15, 1 },
+    ["warning"]         = { 1, 0.62, 0.1, 1 },   -- avertissement (texte + bordure)
+    ["warningBg"]       = { 0.30, 0.17, 0.02, 0.9 },
     ["destructiveBg"]   = { 0.55, 0.12, 0.12, 0.75 },
     ["destructiveHover"]= { 0.78, 0.16, 0.16, 0.95 },
     -- INFORMATION (pas une erreur). Le rouge dit « tu as fait une betise » ; une variante

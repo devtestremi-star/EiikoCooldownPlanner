@@ -176,7 +176,7 @@ Data/
   Roster.lua             # profils de heal (HR.HEAL_PROFILES) + icônes de classe/spe.
                          #   La couche `comp` (COMP_SLOTS/SortComp/GetGroupComp/VariantHealKey)
                          #   a été supprimée avec le V1 le 2026-08-26.
-  HealerDefaults.lua     # plan de base par healer (variante non supprimable + import)
+  HealerDefaults.lua     # VESTIGE (ancien plan de base par healer) : plus lu par aucune variante
 UI/
   ConfigFrame.lua        # modale B (donjons) / A (boss) / C (occurrences)
                          #   Bouton-icone Options (engrenage) en haut a droite. La vue
@@ -248,6 +248,29 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
     events = { {spellID, name, at, [aoe]}, … } }`. `at` = offset (s) depuis le début
     de la phase. Ex. Araknath (Skyreach) : 2 Energize + Supernova toutes les 54 s.
     Les instances de phase sont numérotées par ordre de début (séparateur UI).
+  - **PHASES À LONGUEUR VARIABLE** — `phaseSegments` (prioritaire sur les deux autres), pour
+    les boss à phases en % de vie (ex. Lightwarden Ruia) : `{ { name, [length], abilities =
+    { {spellID, name, firstAt, [period]}, … } }, … }`. Les segments s'enchaînent ; dans un
+    segment chaque sort suit son cycle (`firstAt` RELATIF au début du segment) tant qu'il tient
+    dans la longueur ; le dernier segment court jusqu'à la fin du combat. Clés d'occurrence
+    **par segment** `P<k>|spellID:N` → changer une longueur ne renumérote JAMAIS une autre
+    phase. La longueur fait partie du PLAN : champ additif de variante
+    `v.phaseLengths[encounterID][k]` (absent = `length` du contenu), écrit par les poignées
+    de la frise (`UI/PlanTimeline.lua`, `HR.V2_SetPhaseLength`), recopié par Duplicate, transporté
+    par Sync/Export (payload `phl`, `Share.SanitizePhaseLengths` ; un vieux client l'ignore) et
+    par l'export d'un boss seul (appliqué par `ST.ApplyBoss`). Une phase raccourcie MASQUE ses
+    occurrences, elle ne supprime aucun placement. Lecture : `HR.WithPhaseLengths(boss, variant)`
+    après `HR.ResolveBossTimeline` ; la VALIDATION d'import utilise `HR.WithAllPhaseKeys` (toutes
+    les clés possibles). Pas de recalage en combat (décision utilisateur 2026-10-17) : le
+    runtime joue les temps issus des longueurs du plan. Détection de PHASE par `phaseTriggers =
+    { { spellID, to, [from] } }` (clé boss) : un sort RECONNU qui déclenche fait passer
+    `s.currentPhase` à `to` (sens unique, `from` = seulement depuis cette phase), et le lien
+    event → occurrence est alors restreint aux occurrences de la phase courante.
+    `phaseDurationGroups = { [phase] = { { dur, [tol], cycle = {spellID,…} } } }` : relances qui
+    partagent une durée mais pas les mêmes sorts selon la phase → cycle scopé à la phase courante,
+    compteur propre à (phase, durée), prioritaire dans `HR.MatchByDuration`. ⚠️ Le Packager (catalogue) ne transporte
+    pas encore `phaseLengths`, et le format web `ecp;2` (`spellID:n`) est ambigu pour un sort
+    présent dans deux phases.
   `aoe` (tri-état) : `true` = dégâts AoE-flaggés (réduits par Zephyr / la stat
   Avoidance), `false` = confirmé non-AoE, `nil` = inconnu/à renseigner. Propagé sur
   chaque occurrence. Chaque capacité (ability OU event de phase) porte aussi :
@@ -303,23 +326,33 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   **custom** de la spe désactivés dans cette variante (opt-out, cf. `Core/CustomSpells.lua`).
   Écrit par la modale Edit/New plan ; recopié par Duplicate ; `HR.IsTokenPlaceable` le lit
   (sans cette branche, éditer la compo purgeait tous les placements custom).
+  Champ additif `bossOff = { [encounterID] = true }` (absent = boss actif) : boss **désactivé
+  dans cette variante** → en combat on joue comme SANS plan (`StartLive`/`StartTest` passent
+  `variant = nil` : aucune annonce, Personal Timeline, son, glow ni icône BigWigs/DBM), mais
+  reconnaissance, Timeline et Progress bars tournent. Placements intacts, plan éditable (bandeau
+  dans la frise). Écrit par le bouton « Disable boss / Enable boss » de la rangée d'actions du
+  plan, à côté de Reset (`UI/HealerSpecs.lua`, `HR.V2_SetBossOff`, verrou `CanEditVariant`), lu par `HR.IsBossOffInVariant`. Recopié
+  par Duplicate, transporté par Sync/Export (payload `boff`, `Share.SanitizeBossOff` ; un vieux
+  client l'ignore). PAS dans l'export d'un boss seul : importer le plan d'un boss ne doit pas
+  couper les annonces chez le destinataire. ≠ `enable = false` du CONTENU (mode brut, global).
+  **Défaut à la CRÉATION** (`HR.V2_CreateVariant`, bouton New) : tout boss du donjon à timeline
+  dynamique (`phaseSegments`) naît DÉSACTIVÉ. Import et Duplicate n'y passent pas : ils
+  reprennent l'état de leur source.
   ⚠️ La notion de **`comp`** — tableau positionnel de 5 slots (`HR.COMP_SLOTS`), trié par
   `HR.SortComp`, comparé au groupe par `HR.GetGroupComp`, dont on tirait l'identité de heal
   via `HR.VariantHealKey` — était **propre au V1** : supprimée le 2026-08-26 avec lui.
   Une variante ne porte plus ni `comp` ni `spec`.
   La variante **jouée en combat** se résout par `HR.GetV2Used` : choix mémorisé pour ma spé
   (`usedByKey`) → défaut de ma spé → **rien**. Aucun repli « 1re variante » côté combat.
-- **Variantes par défaut** (`Data/HealerDefaults.lua`, `HR.healerDefaults[profileKey]`) :
-  une par **profil de heal** (donc DEUX pour le prêtre), id `"default:KEY"`,
-  `isDefault=true`. DATA non supprimable, base quand ce profil est joué. Un **sélecteur de
-  profil heal** (icônes, façon onglets ; le prêtre = deux onglets de spe) filtre le dropdown :
-  variante par défaut du profil choisi + variantes utilisateur dont le `healer` correspond.
-  À la création, le slot heal liste les **profils** (prêtre en Discipline + Holy) ;
-  case « Importer le plan de base du heal » → copie les `assignments` du profil.
-  (Édition in-game d'un défaut = **persistée** : `Database.InitDB` relie les
-  `assignments` de chaque `healerDefaults[key]` à `HR.db.healerDefaults[key]`, seedé
-  une fois depuis la base `.lua`. La table `healerDefaults` reste reconstruite depuis
-  le `.lua` à chaque load — seuls les `assignments` sont DB-backés.)
+- **Variante « Default »** = une variante NORMALE de `s.variants`, désignée par le bouton
+  **Default** pour une spe (`HR.db2.defaultVariants`, `HR.GetDefaultVariantId`) : 2e étape de
+  `HR.GetV2Used`. Toutes les variantes jouées ou affichées sont donc sauvegardées EN ENTIER
+  dans `ECPlannerDB` : un champ additif posé sur une variante persiste toujours.
+  ⚠️ **VESTIGE** : `Data/HealerDefaults.lua` (`HR.healerDefaults[profileKey]`, id `"default:KEY"`,
+  `isDefault`) et sa liaison `Core/Database.lua` (`HR.db.healerDefaults[key]` = assignments)
+  sont des restes de l'ancien modèle, déprécié : AUCUNE variante jouée ou affichée n'en vient
+  (seul `Core/CustomSpells.lua` parcourt encore `HR.db.healerDefaults` à la suppression d'un
+  sort custom). Ne pas raisonner sur ces « défauts » pour une nouvelle feature.
 - **Défensifs** : `HR.defensives[key] = { name, cooldown, [class], [role], [spec],
   [charges], [itemId], [icon], [spellID], [aoeOnly], [talentReq], [talentNot],
   [talentRank] }`. Variantes de CD départagées par talents : `talentReq` (tous présents),

@@ -106,7 +106,9 @@ end
 function V.OccKeys(boss, tlFor)
     local set = {}
     if not boss then return set end
-    local resolved = HR.ResolveBossTimeline(boss, tlFor and tlFor(boss) or nil)
+    -- Phases a longueur variable : TOUTES les cles possibles (une occurrence masquee par une
+    -- phase raccourcie reste legitime, la refuser ferait perdre des placements a l'import).
+    local resolved = HR.WithAllPhaseKeys(HR.ResolveBossTimeline(boss, tlFor and tlFor(boss) or nil))
     for _, o in ipairs(HR.GenerateOccurrences(resolved, HR.FIGHT_LENGTH) or {}) do
         set[o.key] = true
     end

@@ -221,6 +221,8 @@ function Share.BuildPayload(dungeonID, variant, opts)
         tsp    = variant.talentSpells,      -- { [spellID] = cle_de_variante_de_CD }
         asg    = asg,                       -- [encounterID][occKey] = { {token,offset}, ... }
         tlv    = tlv,                        -- [encounterID] = variante de timeline JOUEE
+        phl    = variant.phaseLengths,      -- [encounterID][k] = longueur de phase (s), additif
+        boff   = variant.bossOff,           -- [encounterID] = true : boss sans annonce, additif
     }
 end
 
@@ -228,7 +230,7 @@ end
 -- boss etait le seul du donjon » -- plus un champ qui declare l'intention.
 --
 -- Pourquoi pas une enveloppe dediee : `ValidatePayload` ne controle que des champs NOMMES et
--- ne rejette aucun champ inconnu, `ImportPayload` ne lit que dID/name/healer/ext/tsp/asg/tlv,
+-- ne rejette aucun champ inconnu, `ImportPayload` ne lit que dID/name/healer/ext/tsp/asg/tlv/phl/boff,
 -- et aucun code ne parcourt un payload en `pairs()`. `bossOnly` est donc INERTE sur tout le
 -- parc deja installe : un client d'avant la feature cree une variante ordinaire ne contenant
 -- que ce boss. Il ajoute, il n'ecrase rien.
@@ -237,6 +239,9 @@ end
 -- HR.SetActiveTimelineVariant, qui ecrit une PREFERENCE D'AFFICHAGE du joueur, hors variante.
 -- L'ecrire en effet de bord de l'import d'un seul boss est exactement le probleme ecarte en
 -- §6.5.
+--
+-- PAS de `boff` non plus : desactiver un boss est un choix de la variante qui le JOUE. Importer
+-- le plan d'un boss ne doit pas couper les annonces chez le destinataire.
 --
 -- `name` voyage mais n'est PAS ecrit a l'import : la variante de destination garde le sien.
 -- Il ne sert qu'a l'ecran de confirmation.
@@ -258,6 +263,8 @@ function Share.BuildBossPayload(dungeonID, variant, encID, opts)
         tsp      = variant.talentSpells,
         asg      = { [encID] = asg },
         bossOnly = encID,
+        phl      = variant.phaseLengths and variant.phaseLengths[encID]
+                   and { [encID] = variant.phaseLengths[encID] } or nil,
     }
 end
 
@@ -283,6 +290,8 @@ function Share.ValidatePayload(p)
     if p.tsp ~= nil and type(p.tsp) ~= "table" then return false end
     if p.asg ~= nil and type(p.asg) ~= "table" then return false end
     if p.tlv ~= nil and type(p.tlv) ~= "table" then return false end
+    if p.phl ~= nil and type(p.phl) ~= "table" then return false end
+    if p.boff ~= nil and type(p.boff) ~= "table" then return false end
     return true
 end
 
@@ -294,6 +303,60 @@ function Share.SanitizeExternals(ext)
         n = tonumber(n)
         if n and n > 0 and HR.defensives[HR.DefKeyOf(k)] then
             out[k] = math.min(20, math.floor(n))
+        end
+    end
+    return out
+end
+
+-- Recopie filtree des longueurs de phase (`phl`, boss a `phaseSegments`) : boss du donjon a
+-- phases variables, index de phase 1..N-1 (la derniere est ouverte), valeur bornee
+-- [PHASE_MIN_LENGTH, FIGHT_LENGTH]. nil si rien ne survit (une variante sans reglage n'a pas
+-- la cle). Un client d'avant la feature ignore le champ : ses longueurs restent par defaut.
+function Share.SanitizePhaseLengths(dungeonID, phl)
+    if type(phl) ~= "table" then return nil end
+    local segsOf = {}
+    for _, d in ipairs(HR.content) do
+        if d.id == dungeonID then
+            for _, b in ipairs(d.bosses) do
+                if b.phaseSegments then segsOf[b.id] = #b.phaseSegments end
+            end
+        end
+    end
+    local out
+    for encID, lens in pairs(phl) do
+        encID = tonumber(encID) or encID
+        local n = segsOf[encID]
+        if n and type(lens) == "table" then
+            for k, sec in pairs(lens) do
+                k, sec = tonumber(k), tonumber(sec)
+                if k and k == math.floor(k) and k >= 1 and k < n and sec then
+                    sec = math.max(HR.PHASE_MIN_LENGTH, math.min(HR.FIGHT_LENGTH, math.floor(sec + 0.5)))
+                    out = out or {}
+                    out[encID] = out[encID] or {}
+                    out[encID][k] = sec
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- Recopie filtree des boss desactives (`boff`) : encounterID du donjon a valeur `true`. nil si
+-- rien ne survit. Un client d'avant la feature ignore le champ : le boss reste actif chez lui.
+function Share.SanitizeBossOff(dungeonID, boff)
+    if type(boff) ~= "table" then return nil end
+    local validEnc = {}
+    for _, d in ipairs(HR.content) do
+        if d.id == dungeonID then
+            for _, b in ipairs(d.bosses) do validEnc[b.id] = true end
+        end
+    end
+    local out
+    for encID, off in pairs(boff) do
+        encID = tonumber(encID) or encID
+        if validEnc[encID] and off == true then
+            out = out or {}
+            out[encID] = true
         end
     end
     return out
@@ -352,6 +415,8 @@ function Share.ImportPayload(payload, sender, autodelete)
     if autodelete then expires = ((GetServerTime and GetServerTime()) or time()) + 24 * 3600 end
     local v = HR.V2_ImportVariant(payload.dID, name, payload.healer, ext, tsp, asg, expires)
     if not v then return nil end
+    v.phaseLengths = Share.SanitizePhaseLengths(payload.dID, payload.phl)
+    v.bossOff = Share.SanitizeBossOff(payload.dID, payload.boff)
     -- Applique le choix de variante de timeline JOUEE de l'emetteur (par boss du donjon).
     if type(payload.tlv) == "table" then
         for encID, vid in pairs(payload.tlv) do

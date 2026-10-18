@@ -66,7 +66,7 @@ function UI.ImportBossPlan(resolved, encID, opts)
     local rep = V.Report()
     local tokens = V.CheckBossPlan(resolved.assignments and resolved.assignments[encID], {
         bossName = resolved.boss and resolved.boss.name or "?",
-        occSet   = V.OccKeys(resolved.boss, UI.GetViewedTlVariant),
+        occSet   = V.OccKeys(resolved.boss, UI.GetViewedTlVariant),   -- toutes phases deroulees
     }, rep)
     if not tokens then
         UI.ShowImportReport("This boss plan does not match the addon's data. Nothing was "
@@ -134,5 +134,8 @@ function UI.ImportNativeBossPlan(payload)
         boss        = boss,
         healerKey   = payload.healer,
         assignments = { [encID] = block },   -- BRUT : on valide avant d'assainir (§14.7)
+        -- Longueurs de phase de l'emetteur pour CE boss (boss a `phaseSegments`) : le plan a
+        -- ete pose sur ces longueurs. Assainies ici, filtrees au seul boss declare.
+        phaseLengths = (HR.Share.SanitizePhaseLengths(payload.dID, payload.phl) or {})[encID],
     }, encID)
 end

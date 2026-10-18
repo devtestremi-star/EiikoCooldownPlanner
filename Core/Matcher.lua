@@ -7,6 +7,9 @@
 --       * { kind="threshold", first, rest } -> SEUIL : 1ere occ = first, sinon rest
 --            (rest = spellID unique, OU liste = cycle a partir de la 2e occ)
 --   - compteur PAR duree, remis a zero au pull (cf. RuntimeBox StartLive).
+--   - duree partagee DIFFERENTE selon la phase => `phaseDurationGroups[phase] = { { dur, [tol],
+--       cycle = {spellID,...} }, ... }` : CYCLE scope a la phase courante, compteur PROPRE a la
+--       phase (repart a 1 a l'entree de la phase). Prioritaire sur tout le reste.
 -- Le lien vers l'occurrence PLANIFIEE se fait par le NOM (les ids de la data de durees
 -- peuvent differer de ceux du plan ; le nom est commun) : HR.PlanIdFor.
 local addonName, HR = ...
@@ -25,6 +28,7 @@ local function build(boss)
         tolByDur     = {},   -- [duree] = tolerance d'appariement (defaut EPS ; elargie via { d, tol=x })
         groups       = boss.durationGroups or {},
         phaseTransitions = boss.phaseTransitions or {}, -- [duree] = phase cible (marqueur de transition)
+        phaseGroups  = {},   -- [phase][duree] = { spellID, ... } : cycle scope par phase (phaseDurationGroups)
         nameById     = {},   -- [spellID] = nom (sorts portant des durees)
         planIdByName = {},   -- [nom] = spellID utilise dans le PLAN (phases / abilities firstAt)
     }
@@ -51,10 +55,24 @@ local function build(boss)
             idx.planOkByDurPhase[val][phase] = pl
         end
     end
-    for _, ab in ipairs(boss.abilities or {}) do
+    local function addAbilityDurs(ab)
         if ab.durations then
             idx.nameById[ab.spellID] = ab.name
             for _, d in ipairs(ab.durations) do addDur(d, ab.spellID, ab.phase, ab.allowedInPlan ~= false) end
+        end
+    end
+    for _, ab in ipairs(boss.abilities or {}) do addAbilityDurs(ab) end
+    for _, seg in ipairs(boss.phaseSegments or {}) do                 -- phases a longueur variable
+        for _, ab in ipairs(seg.abilities or {}) do addAbilityDurs(ab) end
+    end
+    for phase, list in pairs(boss.phaseDurationGroups or {}) do
+        for _, g in ipairs(list) do
+            if g.dur and type(g.cycle) == "table" then
+                idx.phaseGroups[phase] = idx.phaseGroups[phase] or {}
+                idx.phaseGroups[phase][g.dur] = g.cycle
+                idx.tolByDur[g.dur] = math.max(idx.tolByDur[g.dur] or EPS, g.tol or EPS)
+                if not seen[g.dur] then seen[g.dur] = true; idx.durs[#idx.durs + 1] = g.dur end
+            end
         end
     end
     for d in pairs(idx.groups) do                 -- defensif : cle de groupe toujours connue
@@ -74,6 +92,11 @@ local function build(boss)
     end
     for _, p in ipairs(boss.phases or {}) do
         for _, ev in ipairs(p.events or {}) do reg(ev) end
+    end
+    for _, seg in ipairs(boss.phaseSegments or {}) do
+        for _, ab in ipairs(seg.abilities or {}) do
+            if ab.firstAt ~= nil then reg(ab) end
+        end
     end
     return idx
 end
@@ -113,7 +136,13 @@ function HR.MatchByDuration(boss, rawDuration, counters, phase)
     -- `phase` ET que la duree est taguee pour cette phase par exactement un sort. Sinon (phase nil ou
     -- aucune data taguee) la branche est sautee => chemin legacy identique au bit pres.
     local ph = phase and idx.byDurPhase[d] and idx.byDurPhase[d][phase]
-    if ph and #ph == 1 then
+    local pg = phase and idx.phaseGroups[phase] and idx.phaseGroups[phase][d]
+    if pg then
+        -- Precedence #0 : cycle scope a la phase, compteur propre a (phase, duree).
+        local ck = "p" .. tostring(phase) .. ":" .. tostring(d)
+        counters[ck] = (counters[ck] or 0) + 1
+        id = pg[((counters[ck] - 1) % #pg) + 1]
+    elseif ph and #ph == 1 then
         id = ph[1]
         local pl = idx.planOkByDurPhase[d] and idx.planOkByDurPhase[d][phase]
         if pl and pl[1] == false then planOk = false end

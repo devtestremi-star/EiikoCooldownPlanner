@@ -836,6 +836,29 @@ function UI.BuildHealerSpecs(parent)
         .. "If you wish to active the currently visible variant during combat, click the \"use\" button.",
         { titleColor = HR.Theme.Color("ERROR_COLOR") })
 
+    -- Bloc AVERTISSEMENT sous la boite active, SEPARE d'elle : boss a timeline dynamique
+    -- (`phaseSegments`, phases en % de vie). Affiche seulement pour un tel boss (RenderHealerSpecs).
+    p.advWarn = UI.Components.Container(p, { padX = 8, padY = 4, content = false,
+        bg = HR.Colors.Get("warningBg"), borderColor = "warning" })
+    p.advWarn:SetHeight(28)
+    p.advWarn.icon = p.advWarn:CreateTexture(nil, "ARTWORK")
+    p.advWarn.icon:SetSize(16, 16)
+    p.advWarn.icon:SetPoint("LEFT", 8, 0)
+    p.advWarn.icon:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
+    p.advWarn.text = p.advWarn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    p.advWarn.text:SetPoint("LEFT", p.advWarn.icon, "RIGHT", 6, 0)
+    p.advWarn.text:SetTextColor(HR.Colors.Unpack("warning"))
+    p.advWarn.text:SetText("Advanced Planning required!")
+    p.advWarn._minW = 8 + 16 + 6 + math.ceil(p.advWarn.text:GetStringWidth()) + 10
+    p.advWarn:SetWidth(p.advWarn._minW)
+    UI.Components.AttachHelpTip(p.advWarn, "Advanced Planning required!",
+        "This boss changes phase at a health percentage, so its timeline depends on how long each "
+        .. "phase lasts. Set the phase lengths with the handles on the timeline.\n\n"
+        .. "Random values can mislead you: cooldowns would be called at the wrong time. "
+        .. "If you are not sure of the phase change timings, I recommend you keep this boss disabled.",
+        { titleColor = HR.Colors.Get("warning") })
+    p.advWarn:Hide()
+
     p.healerIcon = UI.Components.ImageButton(p, { size = SPEC_ICON })
     p.healerIcon:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM"); GameTooltip:SetText(self._specName or ""); GameTooltip:Show()
@@ -1028,6 +1051,18 @@ function UI.BuildHealerSpecs(parent)
     end })
     p.varReset:Hide()
 
+    -- Disable / Enable boss : bascule `v.bossOff` du BOSS AFFICHE dans la variante VISIBLE. En
+    -- combat, un boss desactive joue comme SANS plan (aucune annonce) ; placements intacts.
+    p.varBossOff = UI.Components.TextButton(p, { text = "Disable boss", autoWidth = true, minWidth = 0, padX = 15, padY = 9, onClick = function()
+        local dungeon = HR.content[UI.selDungeon]
+        local boss = dungeon and dungeon.bosses[UI.selBoss]
+        if not boss then return end
+        if HR.V2_SetBossOff(boss.id, not HR.IsBossOffInVariant(HR.GetActiveVariant(), boss.id)) then
+            UI.RefreshRows()
+        end
+    end })
+    p.varBossOff:Hide()
+
     UI.specsPanel = p
     return p
 end
@@ -1068,7 +1103,8 @@ local function RenderVariantControls(p, v)
     p.varExport:ClearAllPoints(); p.varExport:SetPoint("RIGHT", p.varSync, "LEFT", -6, 0)
     p.varImport:ClearAllPoints(); p.varImport:SetPoint("RIGHT", p.varExport, "LEFT", -6, 0)
     p.varReset:ClearAllPoints();  p.varReset:SetPoint("RIGHT", p.varImport, "LEFT", -6, 0)
-    p.varBrowse:ClearAllPoints(); p.varBrowse:SetPoint("RIGHT", p.varReset, "LEFT", -6, 0)
+    p.varBossOff:ClearAllPoints(); p.varBossOff:SetPoint("RIGHT", p.varReset, "LEFT", -6, 0)
+    p.varBrowse:ClearAllPoints(); p.varBrowse:SetPoint("RIGHT", p.varBossOff, "LEFT", -6, 0)
 
     -- Sync : seulement SON PROPRE plan, et seulement s'il y a QUELQU'UN a qui le pousser.
     -- Un plan recu d'un tiers n'est pas re-poussable (il appartient a son auteur) -- le joueur
@@ -1092,6 +1128,14 @@ local function RenderVariantControls(p, v)
     local canEdit = HR.CanEditVariant(v)
     p.varEdit:SetEnabled(canEdit);  p.varEdit:SetAlpha(canEdit and 1 or 0.4)
     p.varReset:SetEnabled(canEdit); p.varReset:SetAlpha(canEdit and 1 or 0.4)
+    -- Boss desactive : bouton SELECTIONNE + libelle inverse (« Enable boss » = l'action a faire).
+    local dungeon = HR.content[UI.selDungeon]
+    local shownBoss = dungeon and dungeon.bosses[UI.selBoss]
+    if shownBoss and not HR.BossEnabled(shownBoss) then shownBoss = nil end   -- boss sans plan (contenu)
+    local bossOff = shownBoss and HR.IsBossOffInVariant(v, shownBoss.id) or false
+    p.varBossOff:SetText(bossOff and "Enable boss" or "Disable boss")
+    p.varBossOff:SetSelected(bossOff)
+    p.varBossOff:SetEnabled(canEdit and shownBoss ~= nil); p.varBossOff:SetAlpha((canEdit and shownBoss) and 1 or 0.4)
 
     -- Default : surligne quand la variante VISIBLE est le defaut auto-charge de sa spe.
     -- Actif seulement si la variante est de MA spe (set) OU deja le defaut (retrait permis).
@@ -1102,11 +1146,30 @@ local function RenderVariantControls(p, v)
 
     p.varTrigger:Show(); p.varNew:Show(); p.varDup:Show(); p.varEdit:Show()
     p.varUse:Show(); p.varDefault:Show(); p.varSetTemplate:Show(); p.varSync:Show(); p.varExport:Show(); p.varImport:Show(); p.varReset:Show()
+    p.varBossOff:Show()
     -- Masque tant qu'aucun pack n'a ete importe : la feature se deverrouille au premier
     -- import. Rederive a chaque rendu, jamais memorise. Il est le plus a GAUCHE, donc son
     -- absence ne laisse aucun trou.
     p.varBrowse:SetShown((HR.Catalog and HR.Catalog.HasContent()) and true or false)
     p.varNew:SetSelected(false)   -- au repos hors etat vide (voir RenderEmptyVariantControls)
+
+    -- LARGEUR du conteneur : la plus large des deux rangees -- boutons du haut (New..Set
+    -- template) ou rangee d'actions du dessous (Browse..Sync, qui s'est allongee avec Disable
+    -- boss). Le selecteur suit le bord gauche du conteneur. Calcule APRES les SetText.
+    local GAP = 6
+    local function rowW(list)
+        local w, n = 0, 0
+        for _, b in ipairs(list) do if b:IsShown() then w = w + b:GetWidth(); n = n + 1 end end
+        return w + math.max(n - 1, 0) * GAP
+    end
+    local topW = rowW({ p.varNew, p.varDup, p.varEdit, p.varUse, p.varDefault, p.varSetTemplate })
+    local actLeft = p.varBrowse:IsShown() and p.varBrowse or p.varBossOff
+    local actW = rowW({ p.varBrowse, p.varBossOff, p.varReset, p.varImport, p.varExport, p.varSync })
+    local leftRef = (actW > topW) and actLeft or p.varNew
+    p.variantBox:SetPoint("LEFT", leftRef, "LEFT", -PADX, 0)
+    p.varTrigger:ClearAllPoints()
+    p.varTrigger:SetPoint("TOPRIGHT", p.varSetTemplate, "BOTTOMRIGHT", 0, -6)
+    p.varTrigger:SetPoint("LEFT", leftRef, "LEFT", 0, 0)
 end
 
 -- Etat SANS variante (nouveau joueur / donjon vierge depuis le retrait des Base templates) :
@@ -1115,6 +1178,7 @@ end
 local function RenderEmptyVariantControls(p)
     p.varTrigger:Hide(); p.varDup:Hide(); p.varEdit:Hide(); p.varUse:Hide()
     p.varDefault:Hide(); p.varSetTemplate:Hide(); p.varSync:Hide(); p.varExport:Hide(); p.varReset:Hide()
+    p.varBossOff:Hide()
     p.varBrowse:Hide()          -- « depuis une variante » : sans variante, New + Import suffisent
     p.variantBox:Hide()
 
@@ -1169,6 +1233,12 @@ function UI.RenderHealerSpecs()
     box:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 0)
     box:SetWidth(SUMMARY_W)
     box:Show()
+
+    -- Avertissement « timeline dynamique » : bloc separe, juste sous la boite active.
+    p.advWarn:ClearAllPoints()
+    p.advWarn:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -4)
+    p.advWarn:SetWidth(math.max(SUMMARY_W, p.advWarn._minW))   -- aligne sur la boite active
+    p.advWarn:SetShown((boss and boss.phaseSegments) and true or false)
 
     if visible then
         RenderVariantControls(p, visible)

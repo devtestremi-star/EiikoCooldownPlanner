@@ -394,7 +394,7 @@ end
 -- ecraserait le plan sous les yeux du joueur pour en ecrire un qu'il ne voit pas.
 local function OccIndex(boss, tlFor)
     local map = {}
-    local resolved = HR.ResolveBossTimeline(boss, tlFor and tlFor(boss) or nil)
+    local resolved = HR.WithAllPhaseKeys(HR.ResolveBossTimeline(boss, tlFor and tlFor(boss) or nil))
     for _, o in ipairs(HR.GenerateOccurrences(resolved, HR.FIGHT_LENGTH) or {}) do
         map[tostring(o.spellID) .. ":" .. tostring(o.occIndex)] = o.key
     end
@@ -701,6 +701,13 @@ function ST.ApplyBoss(resolved, variant, encID)
     variant.assignments = variant.assignments or {}
     HR.ClearVariantBossPlan(variant, encID)
     local incoming = resolved.assignments[encID]
+    -- Longueurs de phase importees (export natif d'un boss a `phaseSegments`) : elles
+    -- accompagnent le plan qu'on vient d'ecraser. Absentes (format texte, boss classique,
+    -- emetteur sans reglage) = celles de la variante restent.
+    if resolved.phaseLengths then
+        variant.phaseLengths = variant.phaseLengths or {}
+        variant.phaseLengths[encID] = resolved.phaseLengths
+    end
     if incoming and next(incoming) then
         variant.assignments[encID] = incoming
         -- Sorts custom recus (export natif d'un boss) -> bibliotheque, sur le bloc QU'ON VIENT
