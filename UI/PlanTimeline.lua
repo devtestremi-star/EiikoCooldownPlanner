@@ -264,22 +264,24 @@ RenderPhaseHandles = function(f, boss, lenSrc, canEdit, whyRO, curVar, xAt)
         local len = HR.GetPhaseLength(boss, lenSrc, k) or 0
         local t = start + len
         if t > FIGHT then break end
-        local h = AcquirePhaseHandle(f, k)
-        local x = xAt(t)
-        h.line:ClearAllPoints()
-        h.line:SetPoint("TOP", f, "TOPLEFT", x, -HANDLE_TOP)
-        h.line:SetPoint("BOTTOM", f, "BOTTOMLEFT", x, 4)
-        h.line:Show()
-        local g = h.grip
-        g:ClearAllPoints()
-        g:SetPoint("TOP", f, "TOPLEFT", x, -HANDLE_TOP)
-        g._boss, g._k, g._start, g._len = boss, k, start, len
-        g._from, g._to = segs[k].name, segs[k + 1].name
-        g._default = segs[k].length
-        g._canEdit, g._why, g._var = canEdit, whyRO, curVar
-        g.time:SetText(fmtTime(t))
-        g:SetAlpha(canEdit and 1 or 0.4)
-        g:Show()
+        if not segs[k].intermission then                -- intermission : longueur fixe, pas de poignee
+            local h = AcquirePhaseHandle(f, k)
+            local x = xAt(t)
+            h.line:ClearAllPoints()
+            h.line:SetPoint("TOP", f, "TOPLEFT", x, -HANDLE_TOP)
+            h.line:SetPoint("BOTTOM", f, "BOTTOMLEFT", x, 4)
+            h.line:Show()
+            local g = h.grip
+            g:ClearAllPoints()
+            g:SetPoint("TOP", f, "TOPLEFT", x, -HANDLE_TOP)
+            g._boss, g._k, g._start, g._len = boss, k, start, len
+            g._from, g._to = segs[k].name, segs[k + 1].name
+            g._default = segs[k].length
+            g._canEdit, g._why, g._var = canEdit, whyRO, curVar
+            g.time:SetText(fmtTime(t))
+            g:SetAlpha(canEdit and 1 or 0.4)
+            g:Show()
+        end
         start = t
     end
 end

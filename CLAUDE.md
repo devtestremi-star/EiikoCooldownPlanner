@@ -266,6 +266,18 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
     { { spellID, to, [from] } }` (clé boss) : un sort RECONNU qui déclenche fait passer
     `s.currentPhase` à `to` (sens unique, `from` = seulement depuis cette phase), et le lien
     event → occurrence est alors restreint aux occurrences de la phase courante.
+    Autre détection de PHASE : `phaseOnMassCancel = { [min], [window], [minAge], [maxPhase] }` (clé
+    boss, seuils PAR BOSS) : ≥ `min` (2) events ANNULÉS (état Canceled) en `window` s (0.3) → phase
+    + 1 (sens unique, plafond `maxPhase` sinon nb de `phaseSegments`). Ne comptent que les events
+    annoncés depuis ≥ `minAge` s (1) : le serveur double des annonces et annule la copie aussitôt.
+    Détecté dans `UI/RuntimeBox.lua` (`CheckMassCancel`), y compris en mode brut (log seul).
+    Segment **`intermission = true`** (ex. Kystia Manaheart : Destabilized, 25 s) : phase SANS event
+    serveur, longueur FIXE (pas de poignée, `phaseLengths` ignoré). Une annulation de masse fait
+    SAUTER à la prochaine intermission (rater la fin d'une intermission ne décale rien) ; à
+    l'ENTRÉE (`EnterPhase`), ses occurrences sont poussées en events synthétiques (détection +
+    temps relatif) → défensifs = instant de détection + offset. Aucun préavis possible.
+    Tout event ANNULÉ (boss quelconque) retire aussi ses défensifs de `s.liveDefs` : rien n'est
+    annoncé pour un sort qui ne partira pas. Une fin NORMALE (Finished/REMOVED) les garde.
     `phaseDurationGroups = { [phase] = { { dur, [tol], cycle = {spellID,…} } } }` : relances qui
     partagent une durée mais pas les mêmes sorts selon la phase → cycle scopé à la phase courante,
     compteur propre à (phase, durée), prioritaire dans `HR.MatchByDuration`. ⚠️ Le Packager (catalogue) ne transporte

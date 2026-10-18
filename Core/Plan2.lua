@@ -691,6 +691,7 @@ function HR.V2_SetPhaseLength(encounterID, k, seconds)
     local boss = HR.GetBossByEncounterID(encounterID)
     local segs = boss and boss.phaseSegments
     if not segs or type(k) ~= "number" or k < 1 or k >= #segs then return false end
+    if segs[k].intermission then return false end                  -- intermission : longueur fixe
     seconds = tonumber(seconds)
     if seconds then
         seconds = math.floor(seconds + 0.5)

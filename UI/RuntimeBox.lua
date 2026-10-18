@@ -1075,40 +1075,80 @@ end
 -- Blizzard. Mirroir EXACT du handler ADDED, mais l'occurrence est connue (pas de matching
 -- par duree). Lecture seule cote DB (on lit les assignments, on n'ecrit rien).
 local SYNTH_PULL_WINDOW = 2
-local function PushSyntheticPullEvents(s)
-    if not s or s.passthrough then return end
+-- Pousse UNE occurrence connue en event synthetique (cast-start absolu `endTime`). Partage par
+-- les sorts au pull et par les segments `intermission` (entree de phase detectee).
+local function PushSyntheticOcc(s, occ, endTime, tag)
     s.seen = s.seen or {}; s.recognized = s.recognized or {}
     s.active = s.active or {}; s.liveDefs = s.liveDefs or {}
-    local _, pClass = UnitClass("player")
+    local eventID = "SYNTH:" .. tostring(occ.key)
+    if s.seen[eventID] then return end
+    s.seen[eventID] = true
+    s.recognized[eventID] = {
+        eventID = eventID, spellID = occ.spellID, name = occ.name,
+        enabled = true, endTime = endTime, synthetic = true,
+    }
+    local defs = HR.GetAssignments(s.variant, s.encounterID, occ.key)
+    s.active[eventID] = {
+        eventID = eventID, occ = occ, defs = defs, endTime = endTime, synthetic = true,
+    }
+    local base = HR.OccDefTime(occ, endTime)
+    for i, e in ipairs(defs) do
+        local token  = HR.EntryToken(e)
+        local offset = HR.EntryOffset(e)
+        local d = HR.defensives[HR.DefKeyOf(token)]
+        s.liveDefs[#s.liveDefs + 1] = {
+            key = "L" .. tostring(eventID) .. "|" .. i,
+            defID = token, defTime = base,
+            offset = offset, occKey = occ.key,
+            mine = HR.TokenIsMine(token),
+            eventID = eventID, bossName = occ.name,
+        }
+    end
+    local nMine = 0
+    for _, e in ipairs(defs) do if HR.TokenIsMine(HR.EntryToken(e)) then nMine = nMine + 1 end end
+    HR.DevLog("synth", "%s %s occ=%s endIn=%.1fs defs=%d mine=%d variant=%s", tag or "pull",
+        HR.DevSafe(occ.name), HR.DevSafe(occ.key), endTime - GetTime(), #defs, nMine,
+        tostring(s.variant and s.variant.id))
+    if HR.debug then
+        HR:Debug(("[rt] synth %s %s @%.1fs defs=%d"):format(tag or "pull", tostring(occ.name), occ.time or 0, #defs))
+    end
+end
+
+local function PushSyntheticPullEvents(s)
+    if not s or s.passthrough then return end
     for _, occ in ipairs(s.planned or {}) do
-        local eventID = "SYNTH:" .. tostring(occ.key)
-        if (occ.time or 0) < SYNTH_PULL_WINDOW and not s.seen[eventID] then
-            s.seen[eventID] = true
-            local endTime = (s.pullTime or GetTime()) + (occ.time or 0)   -- cast-start absolu theorique
-            s.recognized[eventID] = {
-                eventID = eventID, spellID = occ.spellID, name = occ.name,
-                enabled = true, endTime = endTime, synthetic = true,
-            }
-            local defs = HR.GetAssignments(s.variant, s.encounterID, occ.key)
-            s.active[eventID] = {
-                eventID = eventID, occ = occ, defs = defs, endTime = endTime, synthetic = true,
-            }
-            local base = HR.OccDefTime(occ, endTime)
-            for i, e in ipairs(defs) do
-                local token  = HR.EntryToken(e)
-                local offset = HR.EntryOffset(e)
-                local d = HR.defensives[HR.DefKeyOf(token)]
-                s.liveDefs[#s.liveDefs + 1] = {
-                    key = "L" .. tostring(eventID) .. "|" .. i,
-                    defID = token, defTime = base,
-                    offset = offset, occKey = occ.key,
-                    mine = HR.TokenIsMine(token),
-                    eventID = eventID, bossName = occ.name,
-                }
-            end
-            if HR.debug then
-                HR:Debug(("[rt] synth pull %s @%.1fs defs=%d"):format(tostring(occ.name), occ.time or 0, #defs))
-            end
+        if (occ.time or 0) < SYNTH_PULL_WINDOW then
+            PushSyntheticOcc(s, occ, (s.pullTime or GetTime()) + (occ.time or 0), "pull")
+        end
+    end
+end
+
+-- Debut THEORIQUE (s depuis le pull) du segment k d'un boss a `phaseSegments`, avec les longueurs
+-- du plan joue (boss._segLengths, pose par HR.WithPhaseLengths ; intermission = longueur fixe).
+local function SegmentStart(boss, k)
+    local segs, lens, start = boss.phaseSegments, boss._segLengths or {}, 0
+    for j = 1, k - 1 do
+        local seg = segs[j]
+        start = start + ((not seg.intermission and tonumber(lens[j])) or seg.length or 0)
+    end
+    return start
+end
+
+-- ENTREE dans la phase k (detectee) : memorise l'instant ; si c'est un segment `intermission`
+-- (aucun event serveur), ses occurrences sont POUSSEES maintenant : instant de detection + temps
+-- relatif dans le segment -> les defensifs partent de la detection, plus leur offset.
+local function EnterPhase(s, k, why)
+    s.currentPhase = k
+    s.phaseEnteredAt = GetTime()
+    HR.DevLog("STATE", "  phase -> %d (%s)", k, tostring(why))
+    if HR.debug then HR:Debug(("[rt] phase -> %d (%s)"):format(k, tostring(why))) end
+    local seg = s.boss and s.boss.phaseSegments and s.boss.phaseSegments[k]
+    if not (seg and seg.intermission) or s.passthrough then return end
+    local segStart = SegmentStart(s.boss, k)
+    HR.DevLog("STATE", "  intermission %d: segStart=%.1f planned=%d", k, segStart, #(s.planned or {}))
+    for _, occ in ipairs(s.planned or {}) do
+        if occ.phase == k then
+            PushSyntheticOcc(s, occ, s.phaseEnteredAt + ((occ.time or 0) - segStart), "phase")
         end
     end
 end
@@ -1315,6 +1355,10 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_ADDED", function(_, eventInfo)
         if ok and type(r) == "number" then rem = r end
     end
     local endTime = GetTime() + rem
+    -- Instant d'ANNONCE (1re vue) : l'age d'un event annule sert a filtrer les doublons que le
+    -- serveur annule aussitot (cf. CheckMassCancel).
+    s.addedAt = s.addedAt or {}
+    if not s.addedAt[eventInfo.id] then s.addedAt[eventInfo.id] = GetTime() end
     -- (id et duration sont LISIBLES meme en M+ ; spellName/icon secrets -> jamais logges bruts.)
     HR.DevLog("ADDED", "id=%s dur=%s rem=%.2f pass=%s", tostring(eventInfo.id),
         tostring(eventInfo.duration), rem, tostring(s.passthrough))
@@ -1373,9 +1417,7 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_ADDED", function(_, eventInfo)
     for _, trg in ipairs(s.boss and s.boss.phaseTriggers or {}) do
         if trg.spellID == recId and trg.to > s.currentPhase
            and (trg.from == nil or trg.from == s.currentPhase) then
-            s.currentPhase = trg.to
-            HR.DevLog("ADDED", "  phase -> %d (trigger %s)", trg.to, tostring(recId))
-            if HR.debug then HR:Debug(("[rt] phase -> %d (%s)"):format(trg.to, HR.DevSafe(recName))) end
+            EnterPhase(s, trg.to, "trigger " .. tostring(recId))
             break
         end
     end
@@ -1474,6 +1516,46 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_REMOVED", function(_, eventID)
     end
 end)
 
+-- ANNULATION DE MASSE = changement de phase (boss.phaseOnMassCancel, cf. Data/Content.lua) : au moins
+-- `min` events annonces depuis `minAge` s, annules dans une fenetre de `window` s -> phase + 1 (sens
+-- unique, plafonne). Une rafale ne compte qu'UNE fois. Tourne aussi en mode brut (log seulement).
+local function CheckMassCancel(s, eventID)
+    local cfg = s.boss and s.boss.phaseOnMassCancel
+    if type(cfg) ~= "table" then return end
+    local now   = GetTime()
+    local added = s.addedAt and s.addedAt[eventID]
+    if not added or (now - added) < (cfg.minAge or 1) then return end   -- doublon annule aussitot
+    local win = cfg.window or 0.3
+    local kept = {}
+    for _, t in ipairs(s.cancelTimes or {}) do if now - t <= win then kept[#kept + 1] = t end end
+    kept[#kept + 1] = now
+    s.cancelTimes = kept
+    if #kept < (cfg.min or 2) then return end
+    if s.lastMassCancel and (now - s.lastMassCancel) <= win then return end   -- meme rafale
+    local segs = s.boss.phaseSegments
+    local cur  = s.currentPhase or 1
+    -- Dans une intermission encore en cours (longueur fixe) : rien ne peut en ouvrir une autre.
+    local curSeg = segs and segs[cur]
+    if curSeg and curSeg.intermission and s.phaseEnteredAt
+       and (now - s.phaseEnteredAt) < (curSeg.length or 0) then return end
+    -- Cible : la PROCHAINE intermission s'il y en a (rater la fin d'une intermission ne decale
+    -- rien), sinon phase + 1 plafonnee (maxPhase, sinon nombre de segments).
+    local target
+    if segs then
+        for k = cur + 1, #segs do if segs[k].intermission then target = k; break end end
+    end
+    local hasInter = false
+    for _, seg in ipairs(segs or {}) do if seg.intermission then hasInter = true end end
+    if not target and not hasInter then
+        local maxP = cfg.maxPhase or (segs and #segs)
+        if not maxP or cur < maxP then target = cur + 1 end
+    end
+    if not target then return end
+    s.lastMassCancel = now
+    HR.DevLog("STATE", "  mass cancel (%d in %.2fs)", #kept, win)
+    EnterPhase(s, target, "mass cancel")
+end
+
 HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_STATE_CHANGED", function(_, eventID)
     local s = HR.Runtime.state
     if not s or s.mode ~= "live" or not (ET and ET.GetEventState) then return end
@@ -1482,6 +1564,23 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_STATE_CHANGED", function(_, eventID)
     -- logge SYSTEMATIQUEMENT l'etat (meme quand on n'agit pas) pour tracer d'ou ils viennent.
     HR.DevLog("STATE", "id=%s state=%s%s", tostring(eventID), tostring(ok and st or "?"),
         (ok and (st == 2 or st == 3)) and " -> forget" or "")
+    if ok and st == 3 then
+        CheckMassCancel(s, eventID)
+        -- Sort ANNULE : il ne partira jamais -> ses defensifs non plus (Announcement, Personal
+        -- Timeline, son, bossmods lisent s.liveDefs). Seulement sur Canceled : une fin NORMALE garde
+        -- ses defensifs (un AFTER_CAST_END doit survivre a la disparition de l'event).
+        -- Doublon serveur annule aussitot : sa copie vivante a deja repris l'occurrence sous SON
+        -- eventID (dedup par occKey du handler ADDED) -> rien de vivant n'est retire.
+        if s.liveDefs then
+            local n = #s.liveDefs
+            for i = n, 1, -1 do
+                if s.liveDefs[i].eventID == eventID then table.remove(s.liveDefs, i) end
+            end
+            if #s.liveDefs < n then
+                HR.DevLog("STATE", "  id=%s canceled -> %d defensive(s) dropped", tostring(eventID), n - #s.liveDefs)
+            end
+        end
+    end
     if ok and (st == 2 or st == 3) then     -- 2 = Finished, 3 = Canceled
         ForgetTimelineEvent(s, eventID)
     end

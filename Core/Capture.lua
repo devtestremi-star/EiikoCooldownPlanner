@@ -226,6 +226,51 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_ADDED", function(_, eventInfo)
     }
 end)
 
+-- Fin de vie d'un event du record courant : REMOVED et STATE_CHANGED (1=Paused 2=Finished
+-- 3=Canceled). Note sur l'event (meme id) l'instant depuis le pull -> on distingue un sort
+-- CASTE (fini a son temps) d'un sort ANNULE (canceled, ou retire avant son temps).
+local function scanEventById(id)
+    local rec = scanCurrent()
+    if not rec or id == nil then return nil, rec end
+    for _, e in ipairs(rec.events) do if e.id == id then return e, rec end end
+    return nil, rec
+end
+
+local function scanNow(rec)
+    return round1(GetTime() - (rec.pullTime or GetTime()))
+end
+
+HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_REMOVED", function(_, eventID)
+    if not HR.DevScanEnabled() then return end
+    local e, rec = scanEventById(eventID)
+    if e and not e.removedAt then e.removedAt = scanNow(rec) end
+end)
+
+HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_STATE_CHANGED", function(_, eventID)
+    if not HR.DevScanEnabled() or not (ET and ET.GetEventState) then return end
+    local e, rec = scanEventById(eventID)
+    if not e then return end
+    local ok, st = pcall(ET.GetEventState, eventID)
+    if not ok then return end
+    if st == 1 and not e.pausedAt then e.pausedAt = scanNow(rec)
+    elseif st == 2 and not e.finishedAt then e.finishedAt = scanNow(rec)
+    elseif st == 3 and not e.canceledAt then e.canceledAt = scanNow(rec) end
+end)
+
+-- Fin de vie lisible : "CANCELED @x" (etat Canceled, ou retire > 0.5 s avant son temps sans
+-- etre fini), "removed @x", "paused @x", ou "" (encore actif / rien recu).
+local function scanFate(e)
+    if e.canceledAt then return ("CANCELED @%.1f"):format(e.canceledAt) end
+    if e.removedAt and not e.finishedAt and e.removedAt < (e.t or 0) - 0.5 then
+        return ("CANCELED @%.1f (removed early)"):format(e.removedAt)
+    end
+    local parts = {}
+    if e.pausedAt then parts[#parts + 1] = ("paused @%.1f"):format(e.pausedAt) end
+    if e.finishedAt then parts[#parts + 1] = ("finished @%.1f"):format(e.finishedAt) end
+    if e.removedAt then parts[#parts + 1] = ("removed @%.1f"):format(e.removedAt) end
+    return table.concat(parts, " ")
+end
+
 -- Apercu chat du dernier record (sans /reload) : entete + N derniers events.
 function HR.DevScanShow(n)
     local rec = scanCurrent()
@@ -237,8 +282,8 @@ function HR.DevScanShow(n)
     local from = math.max(1, #rec.events - n + 1)
     for i = from, #rec.events do
         local e = rec.events[i]
-        HR:Print(("  +%.1fs  dur=%.1f  ord#%d  id=%s  spellID=%s  \"%s\"")
-            :format(e.t, e.durR, e.ord, tostring(e.id), tostring(e.spellID), tostring(e.spellName)))
+        HR:Print(("  +%.1fs  dur=%.1f  ord#%d  id=%s  spellID=%s  \"%s\"  %s")
+            :format(e.t, e.durR, e.ord, tostring(e.id), tostring(e.spellID), tostring(e.spellName), scanFate(e)))
     end
 end
 
@@ -263,11 +308,11 @@ function HR.DevScanExportString()
         :format(tostring(rec.startedAt), #rec.events, #S.records, #S.records))
     add("-- NB: casts au PULL sans event serveur = invisibles ici -> a ajouter a la main.")
     add("-- ------------------------------------------------------------")
-    add("-- EVENTS  (t = secondes depuis le pull -> at / firstAt)")
+    add("-- EVENTS  (t = secondes depuis le pull -> at / firstAt ; fin = CANCELED/finished/removed @s)")
     for _, e in ipairs(rec.events) do
-        add(("--   +%-6.1fs  dur=%-5.1f (raw %s)  ord#%d  id=%s  spellID=%s  \"%s\"")
+        add(("--   +%-6.1fs  dur=%-5.1f (raw %s)  ord#%d  id=%s  spellID=%s  \"%s\"  %s")
             :format(e.t, e.durR, tostring(e.dur), e.ord, tostring(e.id),
-                tostring(e.spellID), tostring(e.spellName)))
+                tostring(e.spellID), tostring(e.spellName), scanFate(e)))
     end
     add("-- ------------------------------------------------------------")
     add("-- SUMMARY: durees distinctes -> occurrences  (ecrire `durations` / `durationGroups`)")

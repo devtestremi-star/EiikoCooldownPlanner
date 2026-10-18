@@ -96,6 +96,18 @@
 --     RECONNU (matching par duree) et qu'il est un declencheur, la phase courante passe a `to`
 --     (sens unique, `to` > phase courante ; `from` = seulement depuis cette phase). Les defensifs
 --     ne se relient alors qu'aux occurrences de la phase courante. AUCUN recalage des temps.
+--     `phaseOnMassCancel = { [min], [window], [minAge], [maxPhase] }` (cle boss) : ANNULATION DE MASSE
+--     = changement de phase. Quand au moins `min` (defaut 2) events de la timeline serveur sont
+--     ANNULES (etat Canceled) dans une fenetre de `window` s (defaut 0.3), la phase courante avance
+--     de 1 (sens unique, plafond `maxPhase`, sinon le nombre de `phaseSegments`). Seuls comptent les
+--     events annonces depuis au moins `minAge` s (defaut 1) : le serveur double certaines annonces
+--     et annule la copie AUSSITOT -- ces annulations-la ne sont pas un changement de phase.
+--     Si le boss a des segments `intermission = true`, une annulation de masse fait SAUTER a la
+--     prochaine intermission (pas phase + 1) : rater la fin d'une intermission ne decale rien.
+--     SEGMENT `intermission = true` (dans `phaseSegments`) : phase SANS event serveur, de longueur
+--     FIXE (pas de poignee, `phaseLengths` ignore). En combat, a l'ENTREE du segment (detectee),
+--     ses occurrences sont POUSSEES en events synthetiques (instant de detection + temps relatif)
+--     -> les defensifs partent de la detection, plus leur offset (UI/RuntimeBox.lua).
 --
 -- encounterID des boss = ID reel de l'event ENCOUNTER_START (renseigne).
 -- zoneID = instanceID de GetInstanceInfo : encore PLACEHOLDER (0) pour certains.
@@ -1229,12 +1241,31 @@ local content_1210 = {
     { id = "MURDER_ROW",           name = "Murder Row",           abbr = "MR",  icon = 7467179, zoneID = 2813, teleport = 1286809, -- mapID 587
         trash = {},
         bosses = {
-            { id = 3101, name = "Kystia Manaheart", enable = false, -- desactive -> grise en config, mode brut runtime
+            { id = 3101, name = "Kystia Manaheart",
+                -- Seules les INTERMISSIONS comptent pour le heal (Destabilized, 25 s). Elles demarrent au
+                -- changement de phase en % de vie, signale par l'ANNULATION DE MASSE des sorts en attente
+                -- (scan : 3 annules a la meme seconde, puis 25 s sans event). 3 intermissions ; defaut : 1 min
+                -- entre chaque, reglable par le joueur (poignees).
+                -- Les autres sorts sont RECONNUS (Timeline / barres) mais HORS plan : entrees
+                -- « duration-only » (pas de firstAt) -> le planner les ignore.
                 abilities = { -- durees devscan + spellID journal (2679)
                     { spellID = 1253811, name = "Fel Spray",         durations = { 8, 27.5 } },
                     { spellID = 474240,  name = "Fel Nova",          durations = { 12 } },
                     { spellID = 1264095, name = "Mirror Images",     durations = { 15, 30 } },
                     { spellID = 1228198, name = "Corroding Spittle" }, -- private aura
+                },
+                phaseOnMassCancel = { min = 2, window = 0.3, minAge = 1 },
+                phaseSegments = {
+                    { name = "Phase 1", length = 60, abilities = {} },
+                    { name = "Intermission 1", length = 25, intermission = true, abilities = {
+                        { spellID = 1265412, name = "Destabilized", firstAt = 0 } } },
+                    { name = "Phase 2", length = 60, abilities = {} },
+                    { name = "Intermission 2", length = 25, intermission = true, abilities = {
+                        { spellID = 1265412, name = "Destabilized", firstAt = 0 } } },
+                    { name = "Phase 3", length = 60, abilities = {} },
+                    { name = "Intermission 3", length = 25, intermission = true, abilities = {
+                        { spellID = 1265412, name = "Destabilized", firstAt = 0 } } },
+                    { name = "Phase 4", abilities = {} },
                 },
             },
             { id = 3102, name = "Zaen Bladesorrow", phases = {
@@ -1399,6 +1430,7 @@ HR.PHASE_MIN_LENGTH = 10   -- (s) plancher d'une phase reglee par le joueur
 function HR.GetPhaseLength(boss, variant, k)
     local segs = boss and boss.phaseSegments
     if not segs or k >= #segs then return nil end
+    if segs[k].intermission then return segs[k].length end      -- intermission : longueur FIXE
     local own = variant and variant.phaseLengths and variant.phaseLengths[boss.id]
     return tonumber(own and own[k]) or segs[k].length
 end

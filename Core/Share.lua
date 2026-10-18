@@ -318,18 +318,20 @@ function Share.SanitizePhaseLengths(dungeonID, phl)
     for _, d in ipairs(HR.content) do
         if d.id == dungeonID then
             for _, b in ipairs(d.bosses) do
-                if b.phaseSegments then segsOf[b.id] = #b.phaseSegments end
+                if b.phaseSegments then segsOf[b.id] = b.phaseSegments end
             end
         end
     end
     local out
     for encID, lens in pairs(phl) do
         encID = tonumber(encID) or encID
-        local n = segsOf[encID]
+        local segs = segsOf[encID]
+        local n = segs and #segs
         if n and type(lens) == "table" then
             for k, sec in pairs(lens) do
                 k, sec = tonumber(k), tonumber(sec)
-                if k and k == math.floor(k) and k >= 1 and k < n and sec then
+                if k and k == math.floor(k) and k >= 1 and k < n and sec
+                   and not segs[k].intermission then                 -- intermission : longueur fixe
                     sec = math.max(HR.PHASE_MIN_LENGTH, math.min(HR.FIGHT_LENGTH, math.floor(sec + 0.5)))
                     out = out or {}
                     out[encID] = out[encID] or {}

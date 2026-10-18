@@ -134,7 +134,7 @@ local function GenerateFromSegments(boss, fightLength)
     local list, start = {}, 0
     for k, seg in ipairs(segs) do
         if start > fightLength and not boss._segAllKeys then break end
-        local len = tonumber(lengths[k]) or seg.length
+        local len = (not seg.intermission and tonumber(lengths[k])) or seg.length   -- intermission : fixe
         if k == #segs or not len then len = fightLength - start end
         if boss._segAllKeys then len = fightLength end    -- validation : toutes les cles possibles
         local sub = {}
