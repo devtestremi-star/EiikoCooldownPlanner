@@ -254,7 +254,8 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
     segment chaque sort suit son cycle (`firstAt` RELATIF au début du segment) tant qu'il tient
     dans la longueur ; le dernier segment court jusqu'à la fin du combat. Clés d'occurrence
     **par segment** `P<k>|spellID:N` → changer une longueur ne renumérote JAMAIS une autre
-    phase. La longueur fait partie du PLAN : champ additif de variante
+    phase. Segment `plainKeys = true` : clés SANS préfixe (`spellID:N`) — pour un boss CONVERTI
+    dont un seul segment est planifiable (ex. King Dazar, P2) : les plans déployés gardent leurs clés. La longueur fait partie du PLAN : champ additif de variante
     `v.phaseLengths[encounterID][k]` (absent = `length` du contenu), écrit par les poignées
     de la frise (`UI/PlanTimeline.lua`, `HR.V2_SetPhaseLength`), recopié par Duplicate, transporté
     par Sync/Export (payload `phl`, `Share.SanitizePhaseLengths` ; un vieux client l'ignore) et

@@ -92,6 +92,9 @@
 --     `phaseDurationGroups = { [phase] = { { dur, [tol], cycle = {spellID,...} } } }` (cle boss) :
 --     relances qui partagent une duree, mais pas les memes sorts selon la phase -> cycle scope a
 --     la phase courante, compteur repartant a 1 a l'entree de la phase (Core/Matcher.lua).
+--     Segment `plainKeys = true` : cles d'occurrence SANS prefixe "P<k>|" (boss CONVERTI depuis
+--     `phases`/`abilities` : les plans deja deployes gardent leurs cles). A reserver a UN seul
+--     segment planifiable par boss, sinon collision de cles entre segments.
 --     `phaseTriggers = { { spellID, to, [from] }, ... }` (cle boss) : en combat, quand un sort est
 --     RECONNU (matching par duree) et qu'il est un declencheur, la phase courante passe a `to`
 --     (sens unique, `to` > phase courante ; `from` = seulement depuis cette phase). Les defensifs
@@ -931,44 +934,77 @@ local content_1210 = {
                 -- tous les suivants sont le recast de Burn Corruption.
                 [30] = { kind = "threshold", first = 1312146, rest = 1311956 },
             } },
-            { id = 2140, name = "The Council of Tribes", enable = false, -- combat de conseil health-gated a 3
-                -- phases (transitions non-timeables, sorts qui se chevauchent) -> grise en config, mode BRUT
-                -- runtime (aucun matching, affiche tout au fil de l'eau via l'icone/nom serveur).
-                abilities = {} },
+            { id = 2140, name = "The Council of Tribes",
+                -- 3 boss a la suite (Kula -> Aka'ali -> Zanazal) : le suivant arrive a la mort du precedent
+                -- -> phases a longueur variable. Les boss morts continuent certains sorts (Whirling Axes,
+                -- Barrel Through) dans les phases suivantes.
+                -- PLAN : Barrel Through de la phase 2 SEULEMENT (choix joueur ; ceux de P3, toutes les 40 s,
+                -- ne sont pas planifies). Temps = log WCL (1 combat) : lancements 267494 a +5 puis ~21 s
+                -- (76/97/118/138 ; l'impact 266951 suit ~6 s plus tard). P1 ~71 s, P2 ~89 s.
+                -- Phase en combat : 1er Barrel Through -> P2, 1er Arc Lightning -> P3.
+                phaseTriggers = {
+                    { spellID = 267494,  to = 2 },   -- Barrel Through
+                    { spellID = 1305810, to = 3 },   -- Arc Lightning
+                },
+                -- Reconnaissance (duree d'annonce serveur). Seuls les sorts des segments sont planifies.
+                abilities = {
+                    { spellID = 266206,  name = "Whirling Axes",         durations = { 8, 14.8 } },
+                    { spellID = 266231,  name = "Severing Axe",          durations = { 15, 16.5 } },
+                    { spellID = 267494,  name = "Barrel Through",        durations = { 5, 20 } },
+                    { spellID = 266237,  name = "Debilitating Backhand", durations = { 14, 22 } },
+                    { spellID = 1305810, name = "Arc Lightning",         durations = { 2, 7 } },
+                    { spellID = 267273,  name = "Poison Nova",           durations = { 10, 24, 24.4, 24.7, 25.2 } },
+                    { spellID = 267060,  name = "Call of the Elements",  durations = { 20, 52.5 } },
+                },
+                -- Duree 20 partagee : Barrel Through tant qu'Aka'ali vit (P2), Call of the Elements ensuite (P3).
+                phaseDurationGroups = {
+                    [2] = { { dur = 20, cycle = { 267494 } } },
+                    [3] = { { dur = 20, cycle = { 267060 } } },
+                },
+                phaseSegments = {
+                    { name = "Kula the Butcher", length = 71, abilities = {} },
+                    { name = "Aka'ali the Conqueror", length = 89, abilities = {
+                        { spellID = 267494, name = "Barrel Through", firstAt = 5, period = 21 } } },
+                    { name = "Zanazal the Wise", abilities = {} },
+                },
+            },
             { id = 2143, name = "King Dazar", phaseTransitions = { [9] = 2 },
                 durationGroups = { [10] = { 269230, 269369 } }, -- P1 : dur 10 = recast partage, cycle n1 Hunting Leap, n2 Deathly Roar
-                phases = {
-                -- Boss a 2 phases (hard cycles). On ne PLANIFIE QUE la P2 : frise demarre ~1 min apres le
-                -- pull (firstAt=60), period 35 s (verifie sur 3 pulls). Quaking Leap (dur 9) = marqueur
-                -- d'entree P2 -> phaseTransitions (loggue [rt] phase -> 2). INCLURE (plan) : Quaking Leap +
-                -- Gilded Destruction. La P1 est desormais MODELISEE en abilities `phase = 1` (display-only,
-                -- allowedInPlan=false) pour l'affichage runtime, PAS pour le plan (GenerateFromPhases ne lit
-                -- que `phases`). Le tag de phase departage les durees ambigues entre P1 et P2 :
-                --   * Blade Combo : dur 23 (P1) vs dur 38 (P2) ; Gilded Destruction : dur 30 (P1) vs dur 24 (P2).
-                -- Gilded Destruction P1 partage son NOM avec l'occurrence planifiee P2 -> allowedInPlan=false
-                -- + garde `planOk` (Matcher) empechent son lien plan (sinon fuite du defensif P2 en P1).
-                -- spellID (P1 + P2) confirmes via /ecp journal (12.1.0).
-                -- Offset P2 mesure au devscan (12.1) : Quaking Leap a 32.8 puis Gilded Destruction a
-                -- 47.8 -> at = 15. ⚠️ L'entree en P2 est health-gated (32.8 s sur ce pull, ~60 s sur les
-                -- precedents) : firstAt reste une approximation, le runtime recale via phaseTransitions[9].
-                -- Releve joueur, repere t0 = ENTREE EN P2 (pas le pull) -> offsets depuis t0 :
-                --   Quaking Leap 8 / 55 / 102 | Gilded Destruction 23 / 70
-                --   Savage Maul 35 / 82       | Blade Combo 37 / 84
-                -- => period 47 EXACTE (4 sorts x 2 intervalles, tous a 47 ; l'ancien 35 etait faux) et
-                -- at = 15 pour Gilded Destruction CONFIRME (23-8 = 70-55 = 15). Offsets des 2 sorts
-                -- exclus, pour memoire : Savage Maul +27, Blade Combo +29 apres le Quaking Leap.
-                -- firstAt (delai pull -> entree P2) non mesure par ce releve -> inchange.
-                { name = "P2", firstAt = 60, period = 47, events = {
-                    { spellID = 1303327, name = "Quaking Leap",       at = 0, cast = 3,   defMarker = { mode = "AFTER_CAST_END", offset = 0 },             allowedInPlan = true, allowInTimeline = true },
-                    { spellID = 1303267, name = "Gilded Destruction", at = 15, cast = 5.5, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, aoe = true, allowedInPlan = true, allowInTimeline = true },
-                } },
+                -- 2 phases. P1 (Dazar + Reban) : cycle 44 s depuis le pull (Aerial Smash 15, Blade Combo 23,
+                -- Gilded Destruction 30, puis +44). P2 (Dazar + T'zala)
+                -- : entree health-gated, entre 50 et 94 s du pull -> timeline DYNAMIQUE, longueur de P1
+                -- reglee par le joueur (poignee, defaut 60 = l'ancien firstAt). La P2 s'ancre sur son 1er
+                -- Quaking Leap, JAMAIS sur le pull ni sur la derniere Gilded Destruction de P1 (l'entree en
+                -- P2 remet le timer de Gilded Destruction a zero). Cycle P2 47 s : Quaking Leap +0 (cast 4,
+                -- puis 4 sauts), Gilded Destruction +15 (cast 6, impact +21), Savage Maul +27 (T'zala),
+                -- Blade Combo +29. Temps = debut de cast, identiques a +-0.1 s sur 33 combats (+15 a +23).
+                -- PLAN : P1 = Aerial Smash + Blade Combo + Gilded Destruction (cles "P1|spellID:N") ;
+                -- P2 = Quaking Leap + Gilded Destruction. `plainKeys` sur la P2 : cles "spellID:N" de
+                -- l'ancienne representation `phases` (seule la P2 etait planifiee, Nieme occurrence de P2 =
+                -- meme cle) -> les plans deployes se raccrochent tels quels. Pas de collision : la P1 garde
+                -- son prefixe.
+                -- Detection P2 : Quaking Leap (dur 9) -> phaseTransitions. Le tag de phase des abilities
+                -- departage les durees ambigues entre P1 et P2 (Blade Combo 23 vs 38 ; Gilded Destruction 30
+                -- vs 24). Le lien plan est restreint a la phase courante (phaseSegments) : une Gilded
+                -- Destruction de P1 ne peut pas reprendre un defensif de P2.
+                phaseSegments = {
+                    { name = "P1", length = 60, abilities = {
+                        { spellID = 1303115, name = "Aerial Smash",       firstAt = 15, period = 44 },
+                        { spellID = 268586,  name = "Blade Combo",        firstAt = 23, period = 44 },
+                        { spellID = 1303267, name = "Gilded Destruction", firstAt = 30, period = 44, cast = 6, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, aoe = true },
+                    } },
+                    { name = "P2", plainKeys = true, abilities = {
+                        { spellID = 1303327, name = "Quaking Leap",       firstAt = 0,  period = 47, cast = 4, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, allowedInPlan = true, allowInTimeline = true },
+                        { spellID = 1303267, name = "Gilded Destruction", firstAt = 15, period = 47, cast = 6, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, aoe = true, allowedInPlan = true, allowInTimeline = true },
+                    } },
             }, abilities = {
-                -- P1 (phase 1) : cycle ~44 s, sorts affiches en runtime mais NON planifies (allowedInPlan=false).
+                -- P1 (phase 1) : cycle 44 s. Aerial Smash / Blade Combo / Gilded Destruction planifies (segment
+                -- P1) ; Hunting Leap / Deathly Roar affiches seulement.
                 { spellID = 269230, name = "Hunting Leap",       durations = { 8, 10 },  phase = 1, allowedInPlan = false, allowInTimeline = true }, -- opener dur 8 puis recast dur 10
                 { spellID = 269369, name = "Deathly Roar",       durations = { 14, 10 }, phase = 1, allowedInPlan = false, allowInTimeline = true }, -- opener dur 14 puis recast dur 10
-                { spellID = 1303115, name = "Aerial Smash",       durations = { 15 },     phase = 1, allowedInPlan = false, allowInTimeline = true },
-                { spellID = 268586,  name = "Blade Combo",        durations = { 23 },     phase = 1, allowedInPlan = false, allowInTimeline = true }, -- P1 : dur 23 (cf. dur 32 en P2)
-                { spellID = 1303267, name = "Gilded Destruction", durations = { 30 },     phase = 1, allowedInPlan = false, allowInTimeline = true }, -- P1 opener : dur 30 (cf. dur 18 en P2) ; display-only, pas de lien plan
+                { spellID = 1303115, name = "Aerial Smash",       durations = { 15 },     phase = 1, allowInTimeline = true },
+                { spellID = 268586,  name = "Blade Combo",        durations = { 23 },     phase = 1, allowInTimeline = true }, -- P1 : dur 23 (cf. dur 38 en P2)
+                { spellID = 1303267, name = "Gilded Destruction", durations = { 30 },     phase = 1, allowInTimeline = true }, -- P1 : dur 30 (cf. dur 24 en P2)
                 -- P2 (phase 2)
                 { spellID = 1303327, name = "Quaking Leap",       durations = { 9 },  phase = 2 },  -- marqueur entree P2 (phaseTransitions[9]=2)
                 { spellID = 1303267, name = "Gilded Destruction", durations = { 24 }, phase = 2 },  -- P2 cycle (planifie)

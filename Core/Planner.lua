@@ -155,7 +155,11 @@ local function GenerateFromSegments(boss, fightLength)
             if a.time == b.time then return tostring(a.spellID) < tostring(b.spellID) end
             return a.time < b.time
         end)
-        NumberOccurrences(sub, tl .. "P" .. k)
+        -- `plainKeys` : cles SANS prefixe de segment ("spellID:N"), pour un boss converti depuis une
+        -- autre representation dont un seul segment est planifiable (les plans existants gardent
+        -- leurs cles). Sinon "P<k>|spellID:N".
+        if seg.plainKeys then NumberOccurrences(sub, boss._tlVariant)
+        else NumberOccurrences(sub, tl .. "P" .. k) end
         for _, o in ipairs(sub) do list[#list + 1] = o end
         start = start + len
     end
