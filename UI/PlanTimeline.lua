@@ -86,6 +86,11 @@ local function AcquireDefBtn(mk, i)
         -- defaut : ne s'affichent que sur l'icone SELECTIONNEE (clic gauche) -> visuel epure.
         b.nudgeL = SmallButton(b, "-"); b.nudgeL:SetPoint("BOTTOMRIGHT", b, "BOTTOMLEFT", -1, 0); b.nudgeL:Hide()
         b.nudgeR = SmallButton(b, "+"); b.nudgeR:SetPoint("BOTTOMLEFT", b, "BOTTOMRIGHT", 1, 0); b.nudgeR:Hide()
+        -- Pas de 5 s, a l'exterieur des -/+ : [-5][-] icone [+][+5].
+        b.nudgeL5 = SmallButton(b, "-5"); b.nudgeL5:SetWidth(20)
+        b.nudgeL5:SetPoint("BOTTOMRIGHT", b.nudgeL, "BOTTOMLEFT", -1, 0); b.nudgeL5:Hide()
+        b.nudgeR5 = SmallButton(b, "+5"); b.nudgeR5:SetWidth(20)
+        b.nudgeR5:SetPoint("BOTTOMLEFT", b.nudgeR, "BOTTOMRIGHT", 1, 0); b.nudgeR5:Hide()
         -- Clic gauche = selection (affiche -/+) ; clic droit = menu (retrait).
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:SetScript("OnEnter", function(self)
@@ -469,6 +474,10 @@ function UI.RenderPlanTimeline(boss)
             b.nudgeR:SetShown(selected and canEdit)
             b.nudgeL:SetScript("OnClick", function() HR.NewPlan_NudgeOffset(boss.id, o.key, token, -1000); UI.RefreshRows() end)
             b.nudgeR:SetScript("OnClick", function() HR.NewPlan_NudgeOffset(boss.id, o.key, token,  1000); UI.RefreshRows() end)
+            b.nudgeL5:SetShown(selected and canEdit)
+            b.nudgeR5:SetShown(selected and canEdit)
+            b.nudgeL5:SetScript("OnClick", function() HR.NewPlan_NudgeOffset(boss.id, o.key, token, -5000); UI.RefreshRows() end)
+            b.nudgeR5:SetScript("OnClick", function() HR.NewPlan_NudgeOffset(boss.id, o.key, token,  5000); UI.RefreshRows() end)
             b:SetOnClick(function(btn, mouse)
                 if mouse == "RightButton" then
                     UI.OpenPlanDefMenu(btn, boss.id, o, token)
@@ -658,6 +667,13 @@ function UI.OpenPlanDefMenu(anchor, encounterID, occ, token)
                 HR.NewPlan_Remove(encounterID, occ.key, token)
                 UI.RefreshRows()
             end)
+            -- Remet le decalage a 0 (seulement s'il y en a un).
+            if HR.NewPlan_GetOffset(encounterID, occ.key, token) ~= 0 then
+                root:CreateButton("Reset offset", function()
+                    HR.NewPlan_SetOffset(encounterID, occ.key, token, 0)
+                    UI.RefreshRows()
+                end)
+            end
         else
             root:CreateTitle(HR.Colors.Hex("info") .. HR.EditBlockedText(why, cur) .. "|r")
         end

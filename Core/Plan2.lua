@@ -748,7 +748,7 @@ end
 -- Decalage temporel (ms, signe) d'un defensif place. Stocke INLINE sur l'entree
 -- (e.offset). Clamp +-OFFSET_MAX_S. 0 => champ absent. Opere sur la variante ACTIVE
 -- (editee) ; le runtime lit l'offset directement sur l'entree de la variante JOUEE (★).
-HR.OFFSET_MAX_S = 12
+HR.OFFSET_MAX_S = 30
 local OFFSET_MAX_MS = HR.OFFSET_MAX_S * 1000
 
 local function findEntry(enc, occKey, token)

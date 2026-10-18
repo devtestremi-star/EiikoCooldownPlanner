@@ -92,7 +92,7 @@ d'erreur que verra l'utilisateur les emploient.
 | **variante de CD** | Le fait qu'un même sort ait plusieurs cooldowns possibles selon les talents. C'est la raison d'être du suffixe `:0`/`:1`. |
 | **token** | Une *instance assignable* d'un defKey. Quand deux Death Knights portent AMZ, leurs deux tokens sont `51052:0#1` et `51052:0#2` — c'est ce qui permet de suivre les deux cooldowns séparément. |
 | **occKey** | Clé interne d'une occurrence : `<spellID de la capacité>:<numéro>`, par exemple `1265464:2`. |
-| **offset** | Décalage fin, en millisecondes, appliqué à une assignation (« lance-le 1,5 s plus tôt »). Borné à ±12 000 ms. |
+| **offset** | Décalage fin, en millisecondes, appliqué à une assignation (« lance-le 1,5 s plus tôt »). Borné à ±30 000 ms (±12 000 dans les versions précédentes : un client plus ancien borne à 12 s). |
 
 ---
 
@@ -163,7 +163,7 @@ détermine la numérotation des instances (§11.2).
 |---|---|
 | `zoneID`, `encID`, `bossSpell`, `defSpell`, `talent`, `itemID` | entiers décimaux |
 | `n` (numéro d'occurrence) | entier ≥ 1 |
-| `offsetMs` | entier signé, millisecondes, borné à ±12000 par l'addon |
+| `offsetMs` | entier signé, millisecondes, borné à ±30000 par l'addon |
 | `classe` | jeton majuscule sans espace : `DEATHKNIGHT`, `DEMONHUNTER`, `PRIEST`, `EVOKER`… |
 | `spé` | nom anglais de la spécialisation : `Holy`, `Discipline`, `Restoration`, `Preservation`, `Mistweaver`, `Frost`… |
 | `id` | jeton d'identité **opaque et stable**. Sert **uniquement de clé de jointure** entre `r;`, `h;` et `u;`. Aucun nom de personnage : l'addon ne le compare à personne en jeu et ne l'affiche que dans ses messages d'erreur. |

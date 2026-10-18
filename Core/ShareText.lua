@@ -617,7 +617,7 @@ function ST.Resolve(p, opts)
             for _, e in ipairs(list) do if e.token == token then dup = true; break end end
             if not dup then
                 local off = math.floor((u.offset or 0) + 0.5)
-                local maxMs = (HR.OFFSET_MAX_S or 12) * 1000
+                local maxMs = (HR.OFFSET_MAX_S or 30) * 1000
                 off = math.max(-maxMs, math.min(maxMs, off))
                 list[#list + 1] = (off ~= 0) and { token = token, offset = off } or { token = token }
             end

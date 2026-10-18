@@ -383,7 +383,7 @@ function Share.SanitizeAssignments(dungeonID, asg)
                     for _, e in ipairs(defs) do
                         local token = HR.EntryToken(e)
                         if token and HR.defensives[HR.DefKeyOf(token)] then
-                            local offMax = (HR.OFFSET_MAX_S or 8) * 1000
+                            local offMax = (HR.OFFSET_MAX_S or 30) * 1000
                             local off = math.max(-offMax, math.min(offMax, HR.EntryOffset(e)))
                             list[#list + 1] = (off ~= 0) and { token = token, offset = off } or { token = token }
                         end
