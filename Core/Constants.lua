@@ -26,6 +26,16 @@ HR.COLORS = {
 -- Duree de combat theorique utilisee pour generer les occurrences (5 min).
 HR.FIGHT_LENGTH = 300
 
+-- Tolerance (s) pour reconnaitre qu'un event serveur retombe sur une occurrence DEJA tiree :
+-- le serveur re-diffuse une meme occurrence sous PLUSIEURS eventID (bugs historiques
+-- "Revival x3" / "Darkness x7"), et un eventID peut repasser dans ADDED apres REMOVED /
+-- STATE_CHANGED (s.seen efface). Partagee par le lien event -> occurrence (UI/RuntimeBox.lua)
+-- et la resolution des barres BigWigs/DBM (Core/BossModAttach.lua) -> une seule source de
+-- verite, les deux ne peuvent pas diverger.
+-- ⚠️ Implique qu'un boss ne doit pas avoir deux casts LEGITIMES du meme sort a moins de ce
+-- seuil (periodes minimales actuelles : Ruia 20 s, Council of Tribes 21 s, King Dazar 44 s).
+HR.OCC_RECONCILE = 1.5
+
 -- Schema des SavedVariables par defaut. Toute nouvelle cle ajoutee ici sera
 -- fusionnee dans la DB existante au chargement (voir Database.lua).
 HR.DB_DEFAULTS = {

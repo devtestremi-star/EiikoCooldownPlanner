@@ -1077,6 +1077,11 @@ end
 local SYNTH_PULL_WINDOW = 2
 -- Pousse UNE occurrence connue en event synthetique (cast-start absolu `endTime`). Partage par
 -- les sorts au pull et par les segments `intermission` (entree de phase detectee).
+-- ⚠️ NE TOUCHE PAS s.occCounters / s.occFired (compteur d'iterations des boss `phaseSegments`) :
+-- un push synthetique n'est PAS une detection serveur. S'il consommait l'occurrence #1, le
+-- premier event REEL obtiendrait #2 et toute la phase serait decalee. En ne consommant rien,
+-- l'event reel retombe sur la MEME occ.key et la purge par occKey (handler ADDED) remplace
+-- proprement les defensifs synthetiques par ceux au timing reel.
 local function PushSyntheticOcc(s, occ, endTime, tag)
     s.seen = s.seen or {}; s.recognized = s.recognized or {}
     s.active = s.active or {}; s.liveDefs = s.liveDefs or {}
@@ -1142,6 +1147,18 @@ local function EnterPhase(s, k, why)
     s.phaseEnteredAt = GetTime()
     HR.DevLog("STATE", "  phase -> %d (%s)", k, tostring(why))
     if HR.debug then HR:Debug(("[rt] phase -> %d (%s)"):format(k, tostring(why))) end
+    -- DEVLOG : recensement des occurrences PLANIFIEES de la phase qu'on vient d'ouvrir. C'est le
+    -- diagnostic cle du compteur d'iterations : le "xN" doit coller a ce que le joueur voit dans
+    -- sa frise, et la (N+1)e iteration doit alors etre silencieuse.
+    if HR.DevLogEnabled() then
+        local census = {}
+        for _, o in ipairs(s.planned or {}) do
+            if o.phase == k then census[o.spellID] = (census[o.spellID] or 0) + 1 end
+        end
+        for sid, c in pairs(census) do
+            HR.DevLog("STATE", "  phase %d planifie : planId=%s x%d", k, tostring(sid), c)
+        end
+    end
     local seg = s.boss and s.boss.phaseSegments and s.boss.phaseSegments[k]
     if not (seg and seg.intermission) or s.passthrough then return end
     local segStart = SegmentStart(s.boss, k)
@@ -1185,6 +1202,105 @@ local function DevDumpTimeline(tag, boss, raw, used)
     end
 end
 
+--------------------------------------------------------------------------------
+-- Lien event serveur -> occurrence du plan
+--------------------------------------------------------------------------------
+-- DEUX STRATEGIES, choisies par la REPRESENTATION du boss :
+--
+--  * `phaseSegments` (phases en % de vie) -> COMPTEUR D'ITERATIONS PAR PHASE.
+--    La longueur d'une phase est une ESTIMATION DU JOUEUR (poignee de la frise) : le temps
+--    absolu depuis le pull n'est donc PAS une information fiable pour departager deux
+--    occurrences. LES EVENTS SERVEUR SONT LA VERITE -> la Nieme detection du sort X dans la
+--    phase k designe la Nieme occurrence de X dans la phase k. Si le combat depasse ce que le
+--    plan prevoit, il n'y a PLUS de lien -> aucun defensif. Le sort reste RECONNU et AFFICHE
+--    (s.recognized est pose en amont) : seule la colonne defensifs est vide. REGLE PRODUIT :
+--    l'addon annonce ce qui est planifie, et rien d'autre.
+--
+--  * `phases` / `abilities` (la grande majorite) -> ARGMIN SUR LE TEMPS, inchange au bit pres.
+--    Leur grille d'occurrences est ABSOLUE et jamais estimee (firstAt + k*period depuis le
+--    pull) : l'argmin y est correct par construction ET AUTO-REPARANT (une detection ratee ou
+--    en trop ne desynchronise rien). Un compteur, lui, decalerait tout le reste du combat.
+--    Le bug corrige ici ne peut pas les toucher : il n'y a pas de longueur de phase a estimer.
+
+-- Occurrence de `planId` de la phase courante DEJA TIREE dont le cast-start enregistre est a
+-- moins de HR.OCC_RECONCILE de `endAbs` : c'est la MEME occurrence re-diffusee, pas une
+-- nouvelle iteration. LECTURE SEULE, ne consomme aucun compteur -- c'est ce qui permet aux
+-- barres BigWigs/DBM de reutiliser la decision du handler ADDED sans la fausser.
+function HR.Runtime.OccFiredNear(s, planId, endAbs)
+    local fired = s and s.occFired
+    if not fired then return nil end
+    local phase = s.currentPhase or 1
+    for _, o in ipairs(s.planned or {}) do
+        if o.spellID == planId and o.phase == phase then
+            local t = fired[o.key]
+            if t and math.abs(t - endAbs) <= HR.OCC_RECONCILE then return o end
+        end
+    end
+    return nil
+end
+
+-- Boss `phaseSegments` : resolution CONSOMMATRICE (autorite du lien). `endAbs` = instant de
+-- cast-start absolu de l'event (= `endTime` du handler, et = `endAbs` des barres tierces).
+local function ResolveSegmentOcc(s, planId, endAbs)
+    s.occCounters = s.occCounters or {}
+    s.occFired    = s.occFired or {}
+    local phase = s.currentPhase or 1
+    local ck    = tostring(phase) .. "|" .. tostring(planId)
+
+    -- (a) RE-DIFFUSION : meme occurrence sous un autre eventID, ou eventID qui repasse apres
+    --     REMOVED/STATE_CHANGED. On rend l'occurrence telle quelle, compteur INCHANGE.
+    local reuse = HR.Runtime.OccFiredNear(s, planId, endAbs)
+    if reuse then
+        HR.DevLog("ADDED", "  occ REDIFF phase=%d planId=%s -> key=%s (|dt|<=%.1fs, compteur inchange n=%d)",
+            phase, tostring(planId), HR.DevSafe(reuse.key), HR.OCC_RECONCILE, s.occCounters[ck] or 0)
+        return reuse
+    end
+
+    -- (b) NOUVELLE ITERATION : on incremente, puis on prend la Nieme occurrence planifiee de
+    --     (phase, planId). Selection PAR POSITION dans s.planned (deja trie, deja filtre par
+    --     HR.FilterTimeline) -- pas par occIndex : aucun couplage avec la numerotation des cles.
+    local n = (s.occCounters[ck] or 0) + 1
+    s.occCounters[ck] = n
+    local occ, total = nil, 0
+    for _, o in ipairs(s.planned or {}) do
+        if o.spellID == planId and o.phase == phase then
+            total = total + 1
+            if total == n then occ = o end
+        end
+    end
+    if not occ then
+        -- Au-dela de ce que le plan prevoit : AUCUN lien, donc aucun defensif. Le compteur
+        -- continue d'avancer (la N+1e, N+2e... iteration reste sans defensif, et on ne retombe
+        -- JAMAIS par erreur sur la derniere occurrence -- c'etait LE bug corrige ici).
+        HR.DevLog("ADDED", "  occ ITER phase=%d planId=%s n=%d > %d planifiee(s) -> AUCUN defensif (sort affiche)",
+            phase, tostring(planId), n, total)
+        if HR.debug then
+            HR:Debug(("[rt] P%d iter %d/%d : rien de planifie -> aucun defensif"):format(phase, n, total))
+        end
+        return nil
+    end
+    s.occFired[occ.key] = endAbs
+    HR.DevLog("ADDED", "  occ ITER phase=%d planId=%s n=%d/%d -> key=%s t=%.2f",
+        phase, tostring(planId), n, total, HR.DevSafe(occ.key), occ.time or -1)
+    return occ
+end
+
+-- Boss `phases` / `abilities` : ARGMIN HISTORIQUE. Ne rien y changer.
+local function ResolveOccByTime(s, planId, fireRel)
+    local occ, bestDiff
+    for _, o in ipairs(s.planned) do
+        if o.spellID == planId then
+            local d = math.abs(o.time - fireRel)
+            if not bestDiff or d < bestDiff then occ, bestDiff = o, d end
+        end
+    end
+    if not occ then
+        HR.DevLog("ADDED", "  planId=%s : AUCUNE occurrence du plan matchee (fireRel=%.2f)",
+            tostring(planId), fireRel)
+    end
+    return occ
+end
+
 function HR.Runtime.StartLive(encounterID)
     -- GATE ZONE (imposee) : jamais de timeline backend hors d'un donjon connu. On rafraichit la
     -- gate ICI MEME : ENCOUNTER_START est rare, et ca supprime tout risque de flag perime.
@@ -1222,7 +1338,22 @@ function HR.Runtime.StartLive(encounterID)
         pullTime    = GetTime(),
         active      = {},
         durCounters = {},   -- compteur d'occurrences PAR duree (matching, reset au pull)
-        currentPhase = 1,   -- phase runtime detectee (avance via boss.phaseTransitions ; reset au pull)
+        -- DEUX COMPTEURS, DEUX QUESTIONS DIFFERENTES -- ne pas les confondre :
+        --   durCounters : cle = DUREE d'annonce (nombre) ou "p<phase>:<dur>". Propriete de
+        --                 HR.MatchByDuration (Core/Matcher.lua). Repond a "QUEL SORT ?".
+        --   occCounters : cle = "<phase>|<planId>". Propriete de ResolveSegmentOcc (ci-dessus).
+        --                 Repond a "QUELLE ITERATION de ce sort dans cette phase ?" -> quelle
+        --                 occurrence du plan. UNIQUEMENT pour les boss `phaseSegments`.
+        -- Aucun reset : l'avancement de phase est strictement monotone (phaseTriggers /
+        -- phaseTransitions / CheckMassCancel gardent tous `> currentPhase`), donc une cle
+        -- (phase, planId) n'est jamais revisitee, et tout l'etat meurt au Stop().
+        occCounters = {},   -- ["<phase>|<planId>"] = n detections serveur consommees
+        -- [occ.key] = endTime ABSOLU auquel l'occurrence a ete tiree. Discriminant de
+        -- RE-DIFFUSION (cf. HR.OCC_RECONCILE). Survit volontairement a ForgetTimelineEvent.
+        occFired    = {},
+        -- Phase runtime detectee ; reset au pull. Avance par EnterPhase SEULEMENT (trois chemins :
+        -- boss.phaseTriggers, boss.phaseTransitions, boss.phaseOnMassCancel), toujours a sens unique.
+        currentPhase = 1,
         recognized  = {},   -- [eventID] = { spellID, name, enabled, ... } pour la Timeline
         seen        = {},   -- [eventID] = true : evite de recompter/redoubler un re-ADD
         liveDefs    = {},   -- defensifs SPAWNES au match d'un event boss (timing live + marqueur)
@@ -1391,9 +1522,10 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_ADDED", function(_, eventInfo)
     -- qui recurre en milieu de phase est un no-op. (Place sous le dedup s.seen : pas de re-trigger.)
     local toPhase = HR.PhaseTransitionFor(s.boss, eventInfo.duration)
     if toPhase and toPhase > s.currentPhase then
-        s.currentPhase = toPhase
-        HR.DevLog("ADDED", "  phase -> %d", toPhase)
-        if HR.debug then HR:Debug(("[rt] phase -> %d"):format(toPhase)) end
+        -- UN SEUL point d'entree de phase (EnterPhase) pour les trois chemins : phaseTransitions
+        -- (ici), phaseTriggers et CheckMassCancel. Avant, celui-ci ecrivait s.currentPhase en
+        -- direct et ne posait donc pas s.phaseEnteredAt.
+        EnterPhase(s, toPhase, "transition dur=" .. tostring(eventInfo.duration))
     end
 
     -- (1) Le sort entre dans la timeline. (2)+(3) Identification par DUREE (+ compteur de
@@ -1436,27 +1568,21 @@ HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_ADDED", function(_, eventInfo)
         enabled = true, endTime = endTime,
     }
 
-    -- Correspondance EVENTUELLE vers le plan (Upcoming bar + defensifs) : occurrence de CE
-    -- sort la plus proche en temps. Pas de correspondance => pas d'entree Upcoming bar.
+    -- Correspondance EVENTUELLE vers le plan (Upcoming bar + defensifs). Pas de correspondance
+    -- => pas d'entree Upcoming bar, pas de defensif, mais le sort reste AFFICHE (s.recognized
+    -- vient d'etre pose : nom, icone, timeline, progress bar). Cf. le bloc de doc des deux
+    -- strategies, au-dessus de HR.Runtime.OccFiredNear.
     -- planOk=false : sort display-only resolu par phase (ex. Gilded Destruction P1) qui partage son
     -- NOM avec une occurrence planifiee d'une autre phase => on affiche (deja fait ci-dessus) mais on
     -- NE relie PAS au plan, sinon le defensif de la P2 fuite en P1.
     if not planId or planOk == false then return end
-    local fireRel = (GetTime() - s.pullTime) + rem
-    local occ, bestDiff
-    -- Phases a longueur variable : on ne relie qu'aux occurrences de la phase COURANTE (un
-    -- Lightfire de P3 ne doit pas reprendre les defensifs d'un Lightfire de P1).
-    local scoped = s.boss and s.boss.phaseSegments ~= nil
-    for _, o in ipairs(s.planned) do
-        if o.spellID == planId and (not scoped or o.phase == s.currentPhase) then
-            local d = math.abs(o.time - fireRel)
-            if not bestDiff or d < bestDiff then occ, bestDiff = o, d end
-        end
+    local occ
+    if s.boss and s.boss.phaseSegments then
+        occ = ResolveSegmentOcc(s, planId, endTime)                          -- compteur, consommateur
+    else
+        occ = ResolveOccByTime(s, planId, (GetTime() - s.pullTime) + rem)    -- argmin historique
     end
-    if not occ then
-        HR.DevLog("ADDED", "  planId=%s : AUCUNE occurrence du plan matchee (fireRel=%.2f)", tostring(planId), fireRel)
-        return
-    end
+    if not occ then return end
 
     local defs = HR.GetAssignments(s.variant, s.encounterID, occ.key)
     HR.DevLog("ADDED", "  -> occ.key=%s name=%s occ.t=%.2f defs=%d (liveDefs repush)",
@@ -1506,6 +1632,10 @@ local function ForgetTimelineEvent(s, eventID)
     if s.active     then s.active[eventID]     = nil end
     if s.recognized then s.recognized[eventID] = nil end
     if s.seen       then s.seen[eventID]       = nil end
+    -- PAS s.occFired : il est indexe par occ.key, pas par eventID, et c'est justement son
+    -- EXISTENCE apres l'oubli d'un event qui permet a un re-ADD du meme id (s.seen vient
+    -- d'etre efface ici) ou a une re-diffusion sous un autre id de retrouver SON occurrence
+    -- sans faire avancer le compteur d'iterations. Ne pas le nettoyer.
 end
 
 HR:RegisterEvent("ENCOUNTER_TIMELINE_EVENT_REMOVED", function(_, eventID)

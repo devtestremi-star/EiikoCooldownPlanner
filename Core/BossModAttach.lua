@@ -35,7 +35,9 @@ local bwProxy = {}
 local ICON_GAP   = 2       -- ecart entre icones ET ecart barre -> 1re icone (cf. StyleBar)
 local FALLBACK_H = 22      -- hauteur si la barre ne la donne pas (= defaut progressBarHeight)
 local RETRY      = 0.25    -- periode de re-resolution tant que la barre n'est pas liee
-local RECONCILE  = 1.5     -- tolerance (s) pour reconcilier avec une occurrence deja liee
+local RECONCILE  = HR.OCC_RECONCILE   -- tolerance (s) de reconciliation, PARTAGEE avec le lien
+                                      -- event -> occurrence (UI/RuntimeBox.lua) : les deux sites
+                                      -- ne peuvent pas diverger. Cf. Core/Constants.lua.
 local STORE_KEY  = "eiiko:defs"
 
 -- SECRET VALUES (M+ / raid) : la barre du plugin Timeline de BigWigs porte le `spellName`
@@ -119,14 +121,51 @@ end
 -- D'abord RECONCILIATION avec ce qui est deja lie cote ECP : si une entree de s.active
 -- porte ce sort et expire au meme moment, on reutilise SON occurrence -> la barre BW et la
 -- Personal Timeline designent la meme, jamais deux voisines.
--- Sinon, plus proche en temps dans s.planned (meme formule que le handler
--- ENCOUNTER_TIMELINE_EVENT_ADDED de UI/RuntimeBox.lua).
+-- Ensuite, DEUX CHEMINS selon la representation du boss :
+--   * `phaseSegments` : le lien event -> occurrence est pilote par le COMPTEUR d'iterations du
+--     handler ADDED (UI/RuntimeBox.lua), PAS par le temps -- la longueur de phase est une
+--     estimation du joueur. Une barre BW/DBM est le MIROIR d'un cast, jamais une detection de
+--     plus : elle ne doit donc pas consommer le compteur, et deviner par le temps absolu est
+--     precisement le bug corrige. On tente la reconciliation sur les occurrences DEJA TIREES
+--     (lecture seule) puis on RENONCE : rien de planifie = rien d'affiche (regle produit).
+--   * `phases` / `abilities` : plus proche en temps dans s.planned (comportement historique).
 local function FindOcc(s, planId, endAbs)
+    -- Phases a longueur variable : on scope aussi la reconciliation a la phase courante. Sans
+    -- ca, une barre pouvait rendre une occurrence de P1 ou P3 pendant la P2.
+    local scoped = s.boss and s.boss.phaseSegments ~= nil
     for evId, a in pairs(s.active) do
         if a.occ and a.occ.spellID == planId and a.endTime
+           and (not scoped or a.occ.phase == s.currentPhase)
            and math.abs(a.endTime - endAbs) < RECONCILE then
             return a.occ, a.defs, evId
         end
+    end
+
+    if scoped then
+        -- Aucun cout a renoncer : le driver (PumpDriver, RETRY 0.25 s) re-tente tant que la barre
+        -- n'est pas liee, et le niveau 1 (ResolveByEventId) la liera des que l'event serveur
+        -- arrive -- en heritant de la decision du compteur, donc de la BONNE occurrence.
+        local occ = HR.Runtime and HR.Runtime.OccFiredNear and HR.Runtime.OccFiredNear(s, planId, endAbs)
+        if not occ then
+            -- UN SEUL log par (phase, sort). On est dans la boucle de re-resolution du driver
+            -- (PumpDriver, RETRY 0.25 s), qui tourne TANT QUE la barre n'est pas liee -> sans ce
+            -- memo c'est 4 lignes/s PAR barre, et MAX_LINES (20000) ARRETE le devlog, donc on
+            -- tronque le diagnostic avant la partie interessante. La 1re ligne porte toute
+            -- l'information (« ce sort n'a pas pu etre lie dans cette phase ») ; les suivantes
+            -- aucune. Memo PUREMENT debug : pose seulement quand le devlog tourne, et il meurt
+            -- avec l'etat runtime au Stop().
+            if HR.DevLogEnabled() then
+                local ck = tostring(s.currentPhase or 1) .. "|" .. tostring(planId)
+                s.bmaLogged = s.bmaLogged or {}
+                if not s.bmaLogged[ck] then
+                    s.bmaLogged[ck] = true
+                    HR.DevLog("bma", "scoped P%d planId=%s : aucune occurrence tiree pres de endAbs -> pas de decoration",
+                        s.currentPhase or 1, tostring(planId))
+                end
+            end
+            return nil
+        end
+        return occ, HR.GetAssignments(s.variant, s.encounterID, occ.key)
     end
 
     local fireRel = endAbs - s.pullTime
