@@ -242,7 +242,13 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   Un boss se décrit par l'une de **2 représentations** (`GenerateOccurrences`
   dispatche, `phases` prioritaire) :
   - **SIMPLE** — `abilities` = `{ spellID, name, firstAt, period, [aoe] }` : un sort
-    qui se répète (`firstAt + k*period`). `period<=0` => unique.
+    qui se répète (`firstAt + k*period`). `period<=0` => unique. ⚠️ **Pas de plafond
+    d'occurrences** ici (contrairement à `phase.count`), et ne pas en ajouter sans traiter
+    l'import : plafonner retire des clés de `V.OccKeys`, et la validation d'import est STRICTE
+    (« le moindre motif refuse l'import ») → tout plan de ce boss exporté avant le plafond
+    devient impossible à réimporter **en entier**. Un sort health-gated génère donc des
+    occurrences surnuméraires assumées (ex. Frost Overload de Melidrussa Chillworn : 3ᵉ
+    occurrence à 258 s qui n'existe pas en jeu ; un défensif posé dessus ne part jamais).
   - **RICHE** — `phases` = liste de phases qui se répètent ; une **phase** regroupe
     plusieurs sorts à offsets fixes : `phase = { [name], firstAt, period, [count],
     events = { {spellID, name, at, [aoe]}, … } }`. `at` = offset (s) depuis le début
@@ -257,16 +263,48 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
     phase. Segment `plainKeys = true` : clés SANS préfixe (`spellID:N`) — pour un boss CONVERTI
     dont un seul segment est planifiable (ex. King Dazar, P2) : les plans déployés gardent leurs clés. La longueur fait partie du PLAN : champ additif de variante
     `v.phaseLengths[encounterID][k]` (absent = `length` du contenu), écrit par les poignées
-    de la frise (`UI/PlanTimeline.lua`, `HR.V2_SetPhaseLength`), recopié par Duplicate, transporté
+    de la frise (`UI/PlanTimeline.lua`, `HR.V2_SetPhaseLength`). **ÉPINGLÉ à la création** :
+    `V2_CreateVariant` sème les `length` du contenu dans la variante (segments `1..#segs-1`, hors
+    `intermission` — mêmes conditions que `Share.SanitizePhaseLengths`). Sans ça, une variante
+    sans réglage SUIT le contenu, et re-scanner un boss dans une version ultérieure DÉPLACERAIT
+    des occurrences déjà planifiées. Conséquence : **le drag POSE une valeur** (même égale au
+    défaut — `V2_SetPhaseLength` ne l'efface plus, sinon l'épinglage sauterait en silence), et
+    **aucun geste de l'UI ne dépingle** : le clic droit de la poignée, qui effaçait l'entrée, a
+    été retiré (sur un plan neuf la valeur épinglée *est* celle du contenu, donc il redessinait
+    une frise identique tout en supprimant la protection). `V2_SetPhaseLength(.., nil)` reste
+    comme chemin API-only. Recopié par Duplicate, transporté
     par Sync/Export (payload `phl`, `Share.SanitizePhaseLengths` ; un vieux client l'ignore) et
     par l'export d'un boss seul (appliqué par `ST.ApplyBoss`). Une phase raccourcie MASQUE ses
     occurrences, elle ne supprime aucun placement. Lecture : `HR.WithPhaseLengths(boss, variant)`
     après `HR.ResolveBossTimeline` ; la VALIDATION d'import utilise `HR.WithAllPhaseKeys` (toutes
-    les clés possibles). Pas de recalage en combat (décision utilisateur 2026-10-17) : le
-    runtime joue les temps issus des longueurs du plan. Détection de PHASE par `phaseTriggers =
+    les clés possibles). Pas de recalage des TEMPS en combat (décision utilisateur 2026-10-17) :
+    le runtime joue les temps issus des longueurs du plan. ⚠️ **Mais le lien event → occurrence
+    n'est PAS fait par le temps** (décision 2026-10-23) : les events serveur sont la source de
+    vérité, le plan dit *quoi* sur *quelle itération*, le serveur dit *quand*. Donc
+    **compteur d'itérations PAR PHASE** (`ResolveSegmentOcc`, `UI/RuntimeBox.lua`) : la Nième
+    détection du sort X dans la phase k désigne la Nième occurrence de X dans la phase k. La
+    longueur de phase étant une ESTIMATION du joueur, un argmin sur le temps depuis le pull
+    saturait sur la dernière occurrence générée et ré-affichait ses défensifs en boucle (bug
+    « l'addon tourne en rond », Ruia). **Au-delà de ce que le plan prévoit : AUCUN lien**, donc
+    aucun défensif — le sort reste reconnu et affiché, seule la colonne défensifs est vide
+    (règle produit : l'addon annonce ce qui est planifié, et rien d'autre). Corollaire assumé :
+    si le serveur n'a pas annoncé une occurrence, elle n'a pas eu lieu — aucun rattrapage par le
+    temps, ce serait réintroduire le théorique comme arbitre.
+    ⚠️ **DEUX compteurs runtime, deux questions** : `s.durCounters` (clé = durée d'annonce) =
+    « quel sort ? », propriété de `HR.MatchByDuration` ; `s.occCounters` (clé
+    `"<phase>|<planId>"`) = « quelle itération ? ». Ne pas les confondre. `s.occFired[occ.key]`
+    = instant de tir, discriminant de RE-DIFFUSION (`HR.OCC_RECONCILE` = 1,5 s, partagé avec
+    `Core/BossModAttach.lua`) : le serveur re-diffuse une occurrence sous plusieurs eventID →
+    on rend la même occurrence sans incrémenter. Volontairement NON nettoyé par
+    `ForgetTimelineEvent`. Les pushes synthétiques (pull, `intermission`) ne consomment NI
+    compteur NI `occFired` : ils ne sont pas des détections serveur. Les boss en `phases` /
+    `abilities` gardent l'**argmin historique** (`ResolveOccByTime`), correct par construction
+    et auto-réparant sur une grille absolue. Détection de PHASE par `phaseTriggers =
     { { spellID, to, [from] } }` (clé boss) : un sort RECONNU qui déclenche fait passer
     `s.currentPhase` à `to` (sens unique, `from` = seulement depuis cette phase), et le lien
-    event → occurrence est alors restreint aux occurrences de la phase courante.
+    event → occurrence est alors restreint aux occurrences de la phase courante. Les TROIS
+    chemins d'avancement (`phaseTriggers`, `phaseTransitions`, `phaseOnMassCancel`) passent par
+    `EnterPhase` — seul point d'entrée, seul endroit qui pose `s.phaseEnteredAt`.
     Autre détection de PHASE : `phaseOnMassCancel = { [min], [window], [minAge], [maxPhase] }` (clé
     boss, seuils PAR BOSS) : ≥ `min` (2) events ANNULÉS (état Canceled) en `window` s (0.3) → phase
     + 1 (sens unique, plafond `maxPhase` sinon nb de `phaseSegments`). Ne comptent que les events
@@ -349,8 +387,21 @@ clavier : `BINDING_NAME_ECPLANNER_OPEN` et `EiikoCooldownPlanner_OnKeybind` — 
   client l'ignore). PAS dans l'export d'un boss seul : importer le plan d'un boss ne doit pas
   couper les annonces chez le destinataire. ≠ `enable = false` du CONTENU (mode brut, global).
   **Défaut à la CRÉATION** (`HR.V2_CreateVariant`, bouton New) : tout boss du donjon à timeline
-  dynamique (`phaseSegments`) naît DÉSACTIVÉ. Import et Duplicate n'y passent pas : ils
-  reprennent l'état de leur source.
+  dynamique (`phaseSegments`) naît DÉSACTIVÉ **et** avec ses longueurs de phase épinglées (cf.
+  `phaseLengths`). Les deux vont ensemble : le joueur trouve une frise déjà peuplée, mais les
+  défauts viennent de 1-2 logs WCL et pas de son groupe — il vérifie, puis il active. Import et
+  Duplicate n'y passent pas : ils reprennent l'état de leur source.
+  Champ additif **`createdIn`** (string|nil) : version de l'addon sous laquelle le plan a été
+  **auteuré** — sert à situer un plan par rapport aux timings du contenu, qui évoluent. C'est la
+  version de l'**AUTEUR**, pas la date d'arrivée : elle **voyage** (payload `cv`,
+  `Share.SanitizeVersion` — string ≤ 32 car., `^[%w%.%-_]+$`). `V2_CreateVariant` → `HR.VERSION` ;
+  import/Sync → la version de l'émetteur **conservée** ; sans `cv` (émetteur antérieur, format web
+  `ecp;2`, pack de catalogue) → **nil**, on n'invente pas une provenance ; `V2_DuplicateVariant`
+  → **héritée** de la source (même contenu, mêmes timings de référence) ; l'import d'un **boss
+  seul** n'y touche pas (il écrit dans une variante existante). ⚠️ `cv` est le SEUL champ que
+  `ValidatePayload` ne valide pas : le refuser coûterait le plan entier pour une étiquette.
+  ⚠️ **Aucun rattrapage** des variantes antérieures (`nil` = « antérieur au suivi ») — même
+  régime que `dID`, cf. la note dans `Core/Plan2.lua`. Rien ne l'affiche encore.
   ⚠️ La notion de **`comp`** — tableau positionnel de 5 slots (`HR.COMP_SLOTS`), trié par
   `HR.SortComp`, comparé au groupe par `HR.GetGroupComp`, dont on tirait l'identité de heal
   via `HR.VariantHealKey` — était **propre au V1** : supprimée le 2026-08-26 avec lui.
@@ -412,7 +463,7 @@ La clé d'occurrence est `spellID:index` (stable aux édits voisins).
 
 ### Codec de plan (`Core/Share.lua`)
 
-- **Payload** : `{ v=PROTO(2), kind="variant", dID, name, healer, ext, tsp, asg, tlv }`.
+- **Payload** : `{ v=PROTO(2), kind="variant", dID, name, healer, ext, tsp, asg, tlv, phl, boff, cv }`.
   La data statique (defID, encounterID, occKey) est commune aux deux joueurs (même
   addon) → on ne transmet que le nom, le profil de heal et les placements.
 - **Encodage natif 12.0, zéro lib** : `C_EncodingUtil.SerializeCBOR` →
@@ -654,9 +705,11 @@ Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (
   `ActionButton_ShowOverlayGlow` (taint).
   - **DEUX fenêtres déplaçables séparément** (positions persistées `HR.SaveFramePos` :
     clés `"runtime"` et `"comm"`) :
-    * **Upcoming bar** (`UI.runtimeBox`) — **avertissement « hit imminent »** déclenché
-      dans les `WARN_WINDOW` (5) dernières secondes (`CurrentWarn` scanne `s.active`/
-      `s.timeline`, prend le prochain hit AVEC défensifs ≤5s ; `RenderUpcoming`) :
+    * **Upcoming bar** (`UI.runtimeBox`) — **avertissement « hit imminent »** : les défensifs
+      à venir viennent de `HR.Schedule` (`S.Active` / `S.PlanAll`), rendus par
+      `RenderUpcoming`. ⚠️ L'ancienne fonction `CurrentWarn` **n'existe plus** et
+      `WARN_WINDOW` (`UI/RuntimeBox.lua:25`) est une **constante morte** — le seuil effectif
+      est l'option `announceThreshold` / `state.warnOverride`. Contenu de la barre :
       **(1)** nom du sort de boss (masquable, option) ; **(2)** séparateur ; **(3)**
       **colonne** de défensifs planifiés (`LayoutDefColumn`) + **compte à rebours** (temps
       avant le hit) à droite. Hors fenêtre → « Waiting… ». Pilotée par `s.active`
@@ -725,7 +778,8 @@ Restent a faire (cf. §9 de `plan-sync.md`) : UI de revocation de la whitelist (
   persistée, non supprimable). Capacité 1 toutes les 10 s = **AMZ (51052) + SMALL_DEF** ;
   capacité 2 toutes les 15 s = sans CD. `state.warnOverride = 10` force le threshold de
   l'Upcoming bar à 10 s pendant le test. Respecte les toggles Timeline/Upcoming
-  (`UpdateVisibility`). `s.timeline` pilote Timeline + Upcoming (CurrentWarn).
+  (`UpdateVisibility`). `s.timeline` pilote Timeline + Upcoming (via la branche `test` de
+  `HR.Schedule.S.Active` / `S.PlanAll`, où le temps théorique EST la vérité).
 - `/hp gather` (`Capture.lua`) : logge `ENCOUNTER_TIMELINE_EVENT_ADDED` secret-safe
   (pcall par champ → `<secret>` si illisible).
 - Export / import des plans (schéma déjà prêt).

@@ -30,6 +30,12 @@
 --   trash   = liste { spellID, name } : capacites de TRASH reduites par Zephyr
 --             (AoE-flaggees). Section "Trash Info" de la modale, tooltip au survol.
 --   ability = { spellID, name, firstAt (s), period (s), [aoe] }  -- period <= 0 => unique
+--     ⚠️ PAS de plafond d'occurrences sur une ability (un `count` comme celui des `phases`
+--       n'existe PAS ici, et ne doit pas etre ajoute a la legere) : plafonner retire des cles de
+--       l'ensemble rendu par V.OccKeys, et la validation d'import est STRICTE -- tout plan de ce
+--       boss exporte avant le plafond deviendrait impossible a reimporter EN ENTIER. Un sort
+--       health-gated genere donc des occurrences surnumeraires qu'on assume (ex. Frost Overload de
+--       Melidrussa Chillworn, 3e occurrence a 258 s qui n'existe pas en jeu).
 --     aoe : true  = degats AoE-flagges (reduits par Zephyr / la stat Avoidance),
 --           false = confirme NON-AoE (Zephyr inutile -> averti dans le picker),
 --           nil   = inconnu / pas encore renseigne (aucun avertissement).
@@ -89,6 +95,15 @@
 --     (`P<k>|spellID:N`) : changer la longueur d'une phase ne renumerote JAMAIS une autre phase.
 --     Longueurs reelles : `boss._segLengths[k]` (pose par le resolveur), sinon `length`.
 --     Prioritaire sur `phases`/`abilities` (Core/Planner.lua, GenerateFromSegments).
+--     ⚠️ EN COMBAT, le lien event -> occurrence de ces boss se fait par un COMPTEUR
+--     D'ITERATIONS PAR PHASE, pas par le temps (la longueur est une estimation du joueur) :
+--     la Nieme detection du sort X en phase k = Nieme occurrence de X en phase k, et au-dela
+--     de ce que le plan prevoit il n'y a AUCUN lien (donc aucun defensif ; le sort reste
+--     affiche). Cf. ResolveSegmentOcc dans UI/RuntimeBox.lua.
+--     ⚠️ CONTRAINTE QUI EN DECOULE : un sort ne doit pas avoir deux casts LEGITIMES a moins de
+--     `HR.OCC_RECONCILE` (1,5 s) l'un de l'autre dans une meme phase -- ils seraient fusionnes
+--     comme une re-diffusion serveur. A re-verifier a chaque nouveau boss `phaseSegments`
+--     (periodes minimales actuelles : Ruia 20 s, Council of Tribes 21 s, King Dazar 44 s).
 --     `phaseDurationGroups = { [phase] = { { dur, [tol], cycle = {spellID,...} } } }` (cle boss) :
 --     relances qui partagent une duree, mais pas les memes sorts selon la phase -> cycle scope a
 --     la phase courante, compteur repartant a 1 a l'entree de la phase (Core/Matcher.lua).
@@ -718,6 +733,14 @@ local content_1210 = {
                 -- reconnu en live (matching par duree) mais MASQUE de la timeline (allowInTimeline=false).
                 -- Frost Overload : firstAt/period approximatifs (health-gated, releve ~72 puis ~165 s) ; le
                 -- live le recale exactement par sa duree (12 s).
+                -- ⚠️ Le planner en genere une 3e a 258 s (72 + 2*93, dans les 300 s) alors que le boss
+                -- n'a que DEUX transitions (Awaken Whelps ~75 % puis ~45 % PV) : cette occurrence
+                -- n'existe PAS en jeu. On la laisse SCIEMMENT. Un plafond d'occurrences retirerait
+                -- `373686:3` de l'ensemble des cles valides de V.OccKeys, et la validation d'import est
+                -- STRICTE (Core/Validate.lua : « le moindre motif refuse l'import ») -> tout plan de ce
+                -- boss exporte avant le plafond deviendrait impossible a reimporter, en entier. Un
+                -- defensif pose sur cette 3e occurrence ne partira simplement jamais (deux events reels,
+                -- l'argmin ne la choisit pour aucun des deux).
                 { spellID = 373686, name = "Frost Overload", firstAt = 72, period = 93, cast = 0, defMarker = { mode = "AFTER_CAST_START", offset = 0 }, aoe = true, allowedInPlan = true, allowInTimeline = true, durations = { 12 } },
                 { spellID = 1307297, name = "Hailburst",    durations = { 6, 27 },  allowInTimeline = false }, -- cast 2s / at_cast_end ; timer 6 + 27 (companion)
                 { spellID = 1307308, name = "Chillstorm",   durations = { 16, 27 }, allowInTimeline = false }, -- cast 4.5s / at_cast_end ; timer 16 + 27 (companion)
@@ -940,7 +963,9 @@ local content_1210 = {
                 -- Barrel Through) dans les phases suivantes.
                 -- PLAN : Barrel Through de la phase 2 SEULEMENT (choix joueur ; ceux de P3, toutes les 40 s,
                 -- ne sont pas planifies). Temps = log WCL (1 combat) : lancements 267494 a +5 puis ~21 s
-                -- (76/97/118/138 ; l'impact 266951 suit ~6 s plus tard). P1 ~71 s, P2 ~89 s.
+                -- (76/97/118/138 ; l'impact 266951 suit ~6 s plus tard).
+                -- Longueurs par defaut = MOYENNES des instants de transition (mort de chaque roi) :
+                -- P1->P2 a 62 s, P2->P3 a 137 s cumules depuis le pull -> P1 = 62, P2 = 137-62 = 75.
                 -- Phase en combat : 1er Barrel Through -> P2, 1er Arc Lightning -> P3.
                 phaseTriggers = {
                     { spellID = 267494,  to = 2 },   -- Barrel Through
@@ -962,8 +987,8 @@ local content_1210 = {
                     [3] = { { dur = 20, cycle = { 267060 } } },
                 },
                 phaseSegments = {
-                    { name = "Kula the Butcher", length = 71, abilities = {} },
-                    { name = "Aka'ali the Conqueror", length = 89, abilities = {
+                    { name = "Kula the Butcher", length = 62, abilities = {} },
+                    { name = "Aka'ali the Conqueror", length = 75, abilities = {
                         { spellID = 267494, name = "Barrel Through", firstAt = 5, period = 21 } } },
                     { name = "Zanazal the Wise", abilities = {} },
                 },
@@ -972,8 +997,9 @@ local content_1210 = {
                 durationGroups = { [10] = { 269230, 269369 } }, -- P1 : dur 10 = recast partage, cycle n1 Hunting Leap, n2 Deathly Roar
                 -- 2 phases. P1 (Dazar + Reban) : cycle 44 s depuis le pull (Aerial Smash 15, Blade Combo 23,
                 -- Gilded Destruction 30, puis +44). P2 (Dazar + T'zala)
-                -- : entree health-gated, entre 50 et 94 s du pull -> timeline DYNAMIQUE, longueur de P1
-                -- reglee par le joueur (poignee, defaut 60 = l'ancien firstAt). La P2 s'ancre sur son 1er
+                -- : entree health-gated (Dazar sous 80 % PV), entre 50 et 94 s du pull -> timeline
+                -- DYNAMIQUE, longueur de P1 reglee par le joueur (poignee). Defaut 61 = MOYENNE de
+                -- l'instant de transition P1->P2. La P2 s'ancre sur son 1er
                 -- Quaking Leap, JAMAIS sur le pull ni sur la derniere Gilded Destruction de P1 (l'entree en
                 -- P2 remet le timer de Gilded Destruction a zero). Cycle P2 47 s : Quaking Leap +0 (cast 4,
                 -- puis 4 sauts), Gilded Destruction +15 (cast 6, impact +21), Savage Maul +27 (T'zala),
@@ -988,7 +1014,7 @@ local content_1210 = {
                 -- vs 24). Le lien plan est restreint a la phase courante (phaseSegments) : une Gilded
                 -- Destruction de P1 ne peut pas reprendre un defensif de P2.
                 phaseSegments = {
-                    { name = "P1", length = 60, abilities = {
+                    { name = "P1", length = 61, abilities = {
                         { spellID = 1303115, name = "Aerial Smash",       firstAt = 15, period = 44 },
                         { spellID = 268586,  name = "Blade Combo",        firstAt = 23, period = 44 },
                         { spellID = 1303267, name = "Gilded Destruction", firstAt = 30, period = 44, cast = 6, defMarker = { mode = "AFTER_CAST_END", offset = 0 }, aoe = true },
@@ -1089,7 +1115,9 @@ local content_1210 = {
               },
               phaseSegments = {
                 -- 3 phases en % de vie (formes Moonkin -> Bear -> Haranir) : `phaseSegments`, longueur
-                -- ajustable par le joueur (slider). 2 logs WCL ; longueurs par defaut = 2e log.
+                -- ajustable par le joueur (slider). Longueurs par defaut = MOYENNES des instants de
+                -- transition (seuils de PV 70 % puis 40 %) : P1->P2 a 62 s, P2->P3 a 116 s cumules
+                -- depuis le pull -> P1 = 62, P2 = 116-62 = 54.
                 -- Warden's Wrath (Moonkin, 9/34/68 puis 13/34/68 : irregulier) volontairement IGNORE.
                 -- Pulverizing Strikes : seul le 1er des 2 ids (1240210) est garde (le 2e suit a +2 s).
                 -- Bear : cycle 20 s (choix utilisateur ; les logs donnent 21).
@@ -1098,10 +1126,10 @@ local content_1210 = {
                 -- jeu. Les phases restent bornees par leur longueur (slider), pas par ces sorts.
                 -- Ancien contenu (enable = false, ids de private-auras sans timing) : 1239825 Lightfire,
                 -- 1239919 Lightfire Beams, 1241058 Grievous Thrash, 1251345 Blight Resin, 1257094 Pulverized.
-                { name = "Moonkin", length = 76, abilities = {
+                { name = "Moonkin", length = 62, abilities = {
                     { spellID = 1239824, name = "Lightfire",           firstAt = 8,  period = 21 },
                 } },
-                { name = "Bear", length = 69, abilities = {
+                { name = "Bear", length = 54, abilities = {
                     { spellID = 1241058, name = "Grievous Thrash",     firstAt = 3,  period = 20 },
                     { spellID = 1240210, name = "Pulverizing Strikes", firstAt = 10, period = 20 },
                 } },
@@ -1280,8 +1308,11 @@ local content_1210 = {
             { id = 3101, name = "Kystia Manaheart",
                 -- Seules les INTERMISSIONS comptent pour le heal (Destabilized, 25 s). Elles demarrent au
                 -- changement de phase en % de vie, signale par l'ANNULATION DE MASSE des sorts en attente
-                -- (scan : 3 annules a la meme seconde, puis 25 s sans event). 3 intermissions ; defaut : 1 min
-                -- entre chaque, reglable par le joueur (poignees).
+                -- (scan : 3 annules a la meme seconde, puis ~23 s sans event). 3 intermissions.
+                -- Defauts = MOYENNES relevees : 1re fenetre a 73 s du pull (d'ou Phase 1 = 73) et
+                -- fenetre de 23 s (duree FIXE, non reglable). Les intervalles entre fenetres
+                -- (Phase 2/3 = 60) ne sont PAS mesures : dans 31 combats sur 55 elle meurt pendant
+                -- la 1re fenetre. Reglables par le joueur (poignees).
                 -- Les autres sorts sont RECONNUS (Timeline / barres) mais HORS plan : entrees
                 -- « duration-only » (pas de firstAt) -> le planner les ignore.
                 abilities = { -- durees devscan + spellID journal (2679)
@@ -1292,14 +1323,14 @@ local content_1210 = {
                 },
                 phaseOnMassCancel = { min = 2, window = 0.3, minAge = 1 },
                 phaseSegments = {
-                    { name = "Phase 1", length = 60, abilities = {} },
-                    { name = "Intermission 1", length = 25, intermission = true, abilities = {
+                    { name = "Phase 1", length = 73, abilities = {} },
+                    { name = "Intermission 1", length = 23, intermission = true, abilities = {
                         { spellID = 1265412, name = "Destabilized", firstAt = 0 } } },
                     { name = "Phase 2", length = 60, abilities = {} },
-                    { name = "Intermission 2", length = 25, intermission = true, abilities = {
+                    { name = "Intermission 2", length = 23, intermission = true, abilities = {
                         { spellID = 1265412, name = "Destabilized", firstAt = 0 } } },
                     { name = "Phase 3", length = 60, abilities = {} },
-                    { name = "Intermission 3", length = 25, intermission = true, abilities = {
+                    { name = "Intermission 3", length = 23, intermission = true, abilities = {
                         { spellID = 1265412, name = "Destabilized", firstAt = 0 } } },
                     { name = "Phase 4", abilities = {} },
                 },
