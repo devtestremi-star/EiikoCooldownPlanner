@@ -191,6 +191,10 @@ local function overwrite(v, dID, payload, sender)
     for encID, occs in pairs(asg) do v.assignments[encID] = occs end
     v.phaseLengths = HR.Share.SanitizePhaseLengths(dID, payload.phl)   -- longueurs de phase de l'emetteur
     v.bossOff      = HR.Share.SanitizeBossOff(dID, payload.boff)       -- boss desactives de l'emetteur
+    -- Version de l'AUTEUR, conservee (jamais re-estampillee) ; nil si l'emetteur est anterieur
+    -- a la feature. Une re-poussee du MEME plan la reecrit comme le reste : c'est voulu, la
+    -- cible est une variante que ce mecanisme possede (db2.syncImports).
+    v.createdIn    = HR.Share.SanitizeVersion(payload.cv)
 
     -- Choix de variante de timeline JOUEE de l'emetteur (par boss), comme a l'import.
     if type(payload.tlv) == "table" and HR.SetActiveTimelineVariant then

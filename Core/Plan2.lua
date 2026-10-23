@@ -337,6 +337,27 @@ end
 -- interdit. Le champ n'existe donc que sur ce qui se cree A PARTIR DE MAINTENANT, et tout
 -- lecteur doit tolerer son absence en retombant sur le rangement.
 --------------------------------------------------------------------------------
+-- `createdIn` SUR LA VARIANTE  (champ additif, meme regime que `dID` ci-dessus)
+--
+-- Version de l'addon sous laquelle le plan a ete AUTEURE. Sert a situer un plan par rapport
+-- aux timings du contenu : ceux-ci evoluent (re-scans, corrections de period/firstAt), et un
+-- plan fait deux versions plus tot n'a pas ete pense contre les memes.
+--
+-- C'est la version de l'AUTEUR, pas la date d'arrivee chez moi -- elle VOYAGE donc avec le
+-- plan (champ de payload `cv`, cf. Core/Share.lua) :
+--   * New                      -> HR.VERSION (c'est moi l'auteur)
+--   * Import / Sync avec `cv`  -> la version de l'emetteur, CONSERVEE telle quelle
+--   * Import sans `cv`         -> nil : l'auteur est inconnu, on ne l'invente pas
+--     (emetteur en version anterieure, format texte web `ecp;2`, pack de catalogue)
+--   * Duplicate                -> heritee de la source : la copie porte le MEME contenu,
+--                                 donc les memes timings de reference
+--   * Import d'un BOSS SEUL    -> ne touche a RIEN : il ecrit dans une variante existante,
+--                                 dont la version d'auteur ne change pas pour autant
+--
+-- ⚠️ Aucun rattrapage non plus : `nil` sur toutes les variantes anterieures, et ca veut dire
+-- exactement une chose -- « anterieur au suivi ». Estampiller la version courante sur un plan
+-- de l'an dernier serait a la fois une ecriture de masse interdite et une donnee FAUSSE.
+--------------------------------------------------------------------------------
 
 -- Importe une variante PARTAGEE dans un donjon (insertion directe, format V2). `deleteAt`
 -- (timestamp serveur) => auto-suppression au prune (nil = permanente). Renvoie la variante.
@@ -416,16 +437,36 @@ function HR.V2_CreateVariant(name, healer, externals, talentSpells, opts)
         isTemplate   = opts.isTemplate or nil,
         customOff    = (opts.customOff and next(opts.customOff)) and HR.DeepCopy(opts.customOff) or nil,
         assignments  = assignments,
+        createdIn    = HR.VERSION,          -- cf. note sur `createdIn` plus bas
     }
-    -- Boss a timeline DYNAMIQUE (`phaseSegments`) : DESACTIVES par defaut dans une variante
-    -- CREEE (v.bossOff) -- leurs temps dependent des longueurs de phase, le joueur les active
-    -- quand il les a reglees. Import et Duplicate ne passent pas ici : ils gardent la source.
+    -- Boss a timeline DYNAMIQUE (`phaseSegments`) dans une variante CREEE :
+    --  (1) DESACTIVES par defaut (v.bossOff) -- les longueurs de phase par defaut viennent de
+    --      1 ou 2 logs WCL, pas du groupe du joueur : il verifie, puis il active.
+    --  (2) LONGUEURS DE PHASE EPINGLEES (v.phaseLengths) depuis le `length` du contenu. Sans
+    --      ca, une variante sans reglage SUIT le contenu : re-scanner un boss dans une version
+    --      ulterieure DEPLACERAIT les occurrences deja planifiees par le joueur. En les ecrivant
+    --      a la creation, le plan est fige sur les timings du moment. AUCUN geste de l'UI ne peut
+    --      le depingler : la poignee ne fait que POSER une valeur (le clic droit qui effacait
+    --      l'entree a ete retire, il revenait a renoncer a cette protection sans aucun signal).
+    --      Memes deux conditions que Share.SanitizePhaseLengths : jamais le DERNIER segment
+    --      (sa longueur est imposee par fightLength, cf. Core/Planner.lua) ni une `intermission`
+    --      (longueur FIXE du contenu, non reglable).
+    -- Import et Duplicate ne passent pas ici : ils gardent ce que porte leur source.
     for _, d in ipairs(HR.content or {}) do
         if d.id == currentDungeon then
             for _, b in ipairs(d.bosses or {}) do
-                if b.phaseSegments then
+                local segs = b.phaseSegments
+                if segs then
                     v.bossOff = v.bossOff or {}
                     v.bossOff[b.id] = true
+                    for k = 1, #segs - 1 do
+                        local len = tonumber(segs[k].length)
+                        if len and not segs[k].intermission then
+                            v.phaseLengths = v.phaseLengths or {}
+                            v.phaseLengths[b.id] = v.phaseLengths[b.id] or {}
+                            v.phaseLengths[b.id][k] = len
+                        end
+                    end
                 end
             end
         end
@@ -592,6 +633,9 @@ function HR.V2_DuplicateVariant(name)
         customOff    = cur.customOff and HR.DeepCopy(cur.customOff) or nil,
         phaseLengths = cur.phaseLengths and HR.DeepCopy(cur.phaseLengths) or nil,
         bossOff      = cur.bossOff and HR.DeepCopy(cur.bossOff) or nil,
+        -- HERITEE, pas re-estampillee : la copie porte le MEME contenu que sa source, donc les
+        -- memes timings de reference. `nil` si la source n'en avait pas. Cf. note `createdIn`.
+        createdIn    = cur.createdIn,
         -- PAS de `synced` ni de `syncFrom` : cf. l'avertissement ci-dessus.
     }
     -- La copie devient MODIFIABLE : les sorts custom recus qu'elle porte (plan Sync ou
@@ -682,9 +726,17 @@ function HR.NewPlan_Remove(encounterID, occKey, token)
 end
 
 -- Regle la longueur (s) de la phase k d'un boss a `phaseSegments`, dans la variante ACTIVE
--- (champ additif `v.phaseLengths[encounterID][k]`). nil ou valeur par defaut = retire le
--- reglage. Les placements ne sont JAMAIS touches : une occurrence sortie de la phase est
--- seulement masquee, elle revient si on rallonge. Renvoie true si quelque chose a change.
+-- (champ additif `v.phaseLengths[encounterID][k]`). `seconds = nil` => retire le reglage, donc
+-- DEPINGLE la phase (elle re-suit le `length` du contenu).
+-- ⚠️ CHEMIN API-ONLY : plus aucun appelant. La poignee de la frise ne fait que POSER une valeur,
+-- et le clic droit qui passait `nil` a ete RETIRE (il revenait a renoncer silencieusement a
+-- l'epinglage pose a la creation). Branche conservee parce que c'est la semantique « retirer le
+-- reglage » de l'API. Cf. Interface/docs/EiikoCooldownPlanner/dead-code.md.
+-- Une valeur EGALE au defaut du contenu est STOCKEE, pas effacee -- les variantes creees
+-- epinglent justement les defauts (cf. V2_CreateVariant), et les effacer ici ferait perdre
+-- l'epinglage en silence des que le joueur ramene la poignee sur sa valeur d'origine.
+-- Les placements ne sont JAMAIS touches : une occurrence sortie de la phase est seulement
+-- masquee, elle revient si on rallonge. Renvoie true si quelque chose a change.
 function HR.V2_SetPhaseLength(encounterID, k, seconds)
     local v = HR.GetActiveVariant()
     if not v or not HR.CanEditVariant(v) then return false end    -- verrou d'edition
@@ -696,7 +748,6 @@ function HR.V2_SetPhaseLength(encounterID, k, seconds)
     if seconds then
         seconds = math.floor(seconds + 0.5)
         seconds = math.max(HR.PHASE_MIN_LENGTH, math.min(HR.FIGHT_LENGTH, seconds))
-        if seconds == segs[k].length then seconds = nil end
     end
     local cur = v.phaseLengths and v.phaseLengths[encounterID] and v.phaseLengths[encounterID][k]
     if cur == seconds then return false end

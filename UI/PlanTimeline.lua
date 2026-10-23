@@ -148,7 +148,8 @@ end
 -- phase, a faire glisser sur la frise. Allonger une phase prolonge son cycle ; les phases
 -- suivantes se decalent. Le reglage est ecrit dans la variante au RELACHEMENT
 -- (HR.V2_SetPhaseLength) ; pendant le drag, `UI.phaseDrag` surcharge la longueur pour un
--- rendu en direct. Clic droit = longueur par defaut. Les placements ne sont jamais touches.
+-- rendu en direct. Le DRAG est le seul geste (pas de clic droit, cf. le commentaire sur
+-- OnMouseUp). Les placements ne sont jamais touches.
 --------------------------------------------------------------------------------
 
 local HANDLE_TOP = 62           -- haut de la poignee (px depuis le haut du cadre ; axe a LINE_Y)
@@ -201,9 +202,16 @@ local function AcquirePhaseHandle(f, k)
         GameTooltip:SetText(("%s -> %s"):format(self._from or "?", self._to or "?"))
         if self._canEdit then
             GameTooltip:AddLine("Drag to set how long this phase lasts.", 1, 1, 1, true)
-            GameTooltip:AddLine(("Right-click: default (%s)."):format(fmtTime(self._default or 0)), 0.7, 0.7, 0.7, true)
         else
             GameTooltip:AddLine(HR.EditBlockedText(self._why, self._var), 1, 1, 1, true)
+        end
+        -- Epinglee ou heritee : le nombre affiche est le MEME dans les deux cas (une variante
+        -- creee epingle les defauts du contenu), donc sans cette ligne rien ne distingue un plan
+        -- protege d'un plan qui suivra la prochaine correction de timings.
+        if self._pinned then
+            GameTooltip:AddLine("Saved in this plan: future timing updates won't move it.", 0.7, 0.7, 0.7, true)
+        else
+            GameTooltip:AddLine("Follows the addon default: a timing update may move it.", 0.7, 0.7, 0.7, true)
         end
         GameTooltip:Show()
     end)
@@ -243,12 +251,13 @@ local function AcquirePhaseHandle(f, k)
             end
         end)
     end)
+    -- Le DRAG est le seul geste de la poignee. Il n'y a volontairement PAS de clic droit :
+    -- il remettait la longueur par defaut en EFFACANT l'entree de la variante, ce qui depuis
+    -- l'epinglage a la creation revient a DEPINGLER la phase (elle re-suivrait le contenu).
+    -- Sur un plan neuf la valeur epinglee EST celle du contenu -> la frise redessinee etait
+    -- identique et le joueur renoncait a la protection sans aucun signal.
     g:SetScript("OnMouseUp", function(self, button)
-        if button == "RightButton" then
-            if self._canEdit and HR.V2_SetPhaseLength(self._boss.id, self._k, nil) then UI.RefreshRows() end
-        elseif UI.phaseDrag then
-            finishDrag(self)
-        end
+        if UI.phaseDrag then finishDrag(self) end
     end)
 
     f.phaseHandles[k] = h
@@ -276,8 +285,13 @@ RenderPhaseHandles = function(f, boss, lenSrc, canEdit, whyRO, curVar, xAt)
             g:SetPoint("TOP", f, "TOPLEFT", x, -HANDLE_TOP)
             g._boss, g._k, g._start, g._len = boss, k, start, len
             g._from, g._to = segs[k].name, segs[k + 1].name
-            g._default = segs[k].length
             g._canEdit, g._why, g._var = canEdit, whyRO, curVar
+            -- La longueur est-elle EPINGLEE dans ce plan, ou heritee du contenu ? Les deux
+            -- affichent le meme nombre (une variante creee epingle justement les defauts), donc
+            -- seul le tooltip peut le dire. On lit la VARIANTE REELLE (`curVar`), pas `lenSrc`,
+            -- qui peut etre la copie synthetique du drag en cours.
+            local own = curVar and curVar.phaseLengths and curVar.phaseLengths[boss.id]
+            g._pinned = (own and own[k]) ~= nil
             g.time:SetText(fmtTime(t))
             g:SetAlpha(canEdit and 1 or 0.4)
             g:Show()

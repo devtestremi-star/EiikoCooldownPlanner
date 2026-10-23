@@ -223,6 +223,7 @@ function Share.BuildPayload(dungeonID, variant, opts)
         tlv    = tlv,                        -- [encounterID] = variante de timeline JOUEE
         phl    = variant.phaseLengths,      -- [encounterID][k] = longueur de phase (s), additif
         boff   = variant.bossOff,           -- [encounterID] = true : boss sans annonce, additif
+        cv     = variant.createdIn,         -- version de l'AUTEUR du plan, additif (cf. Plan2.lua)
     }
 end
 
@@ -292,6 +293,10 @@ function Share.ValidatePayload(p)
     if p.tlv ~= nil and type(p.tlv) ~= "table" then return false end
     if p.phl ~= nil and type(p.phl) ~= "table" then return false end
     if p.boff ~= nil and type(p.boff) ~= "table" then return false end
+    -- `cv` (version de l'auteur) n'est VOLONTAIREMENT pas valide ici, contrairement aux champs
+    -- ci-dessus. Eux decident de ce que le plan FAIT -- un type faux signale un payload corrompu,
+    -- on le jette. `cv` n'est qu'une etiquette : la refuser couterait le plan ENTIER pour une
+    -- donnee cosmetique. Share.SanitizeVersion la laisse tomber a nil et l'import continue.
     return true
 end
 
@@ -341,6 +346,19 @@ function Share.SanitizePhaseLengths(dungeonID, phl)
         end
     end
     return out
+end
+
+-- Version d'addon de l'AUTEUR du plan (`cv` -> v.createdIn). Entree RESEAU qui sera PERSISTEE
+-- et, a terme, affichee : on n'accepte donc qu'une chaine courte et typographiquement inoffensive
+-- (chiffres, lettres, point, tiret, souligne), jamais une table ni un nombre. nil = auteur
+-- inconnu (emetteur anterieur a la feature, format texte web, pack de catalogue) -- on ne
+-- substitue JAMAIS la version locale, ce serait inventer une provenance. Cf. la note `createdIn`
+-- de Core/Plan2.lua.
+function Share.SanitizeVersion(cv)
+    if type(cv) ~= "string" then return nil end
+    if #cv == 0 or #cv > 32 then return nil end
+    if not cv:match("^[%w%.%-_]+$") then return nil end
+    return cv
 end
 
 -- Recopie filtree des boss desactives (`boff`) : encounterID du donjon a valeur `true`. nil si
@@ -419,6 +437,9 @@ function Share.ImportPayload(payload, sender, autodelete)
     if not v then return nil end
     v.phaseLengths = Share.SanitizePhaseLengths(payload.dID, payload.phl)
     v.bossOff = Share.SanitizeBossOff(payload.dID, payload.boff)
+    -- Version de l'AUTEUR, conservee telle quelle : on ne re-estampille pas avec HR.VERSION.
+    -- Absente (emetteur anterieur a la feature) => nil, l'auteur reste inconnu.
+    v.createdIn = Share.SanitizeVersion(payload.cv)
     -- Applique le choix de variante de timeline JOUEE de l'emetteur (par boss du donjon).
     if type(payload.tlv) == "table" then
         for encID, vid in pairs(payload.tlv) do
